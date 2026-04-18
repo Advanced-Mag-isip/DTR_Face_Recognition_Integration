@@ -19,7 +19,7 @@ router.get('/', protect, admin, async (req, res) => {
             role: u.role,
             department: u.department,
             position: u.position,
-            monthlySalary: u.monthlySalary,
+            dailySalary: u.dailySalary,
             overtimeHourlyRate: u.overtimeHourlyRate,
             isActive: u.isActive,
             createdAt: u.createdAt,
@@ -32,24 +32,47 @@ router.get('/', protect, admin, async (req, res) => {
 
 // Create new user (admin only)
 router.post('/', protect, admin, async (req, res) => {
-    const { employeeId, password, firstName, lastName, role, department, isActive, position, monthlySalary, overtimeHourlyRate } = req.body;
+    const { employeeId, password, firstName, lastName, role, department, isActive, position, dailySalary, overtimeHourlyRate } = req.body;
 
     try {
-        const existingUser = await User.findOne({ where: { employeeId } });
-        if (existingUser) {
-            return res.status(400).json({ message: 'Employee ID already exists' });
+        // Auto-generate employee ID based on role if not provided
+        let generatedEmployeeId = employeeId;
+        if (!generatedEmployeeId) {
+            const prefix = role === 'admin' ? 'ADMIN' : 'EMP';
+            const lastUser = await User.findOne({
+                where: { role },
+                order: [['employeeId', 'DESC']]
+            });
+            
+            let nextNum = 1;
+            if (lastUser && lastUser.employeeId) {
+                const match = lastUser.employeeId.match(new RegExp(`^${prefix}-(\\d+)$`));
+                if (match) {
+                    nextNum = parseInt(match[1], 10) + 1;
+                }
+            }
+            generatedEmployeeId = `${prefix}-${String(nextNum).padStart(3, '0')}`;
+        } else {
+            // Check if provided employee ID already exists
+            const existingUser = await User.findOne({ where: { employeeId: generatedEmployeeId } });
+            if (existingUser) {
+                return res.status(400).json({ message: 'Employee ID already exists' });
+            }
         }
 
+        // Default password is the same as employee ID
+        const generatedPassword = generatedEmployeeId;
+
         const user = await User.create({
-            employeeId,
-            password,
+            employeeId: generatedEmployeeId,
+            password: password || generatedPassword,
             firstName,
             lastName,
             role,
             department,
             isActive: isActive !== undefined ? isActive : true,
             position: position || null,
-            monthlySalary: monthlySalary || 0,
+            dailySalary: dailySalary || 0,
             overtimeHourlyRate: overtimeHourlyRate || 0
         });
 
@@ -63,7 +86,7 @@ router.post('/', protect, admin, async (req, res) => {
                 role: user.role,
                 department: user.department,
                 position: user.position,
-                monthlySalary: user.monthlySalary,
+                dailySalary: user.dailySalary,
                 overtimeHourlyRate: user.overtimeHourlyRate,
                 isActive: user.isActive
             }
@@ -75,7 +98,7 @@ router.post('/', protect, admin, async (req, res) => {
 
 // Update user (admin only)
 router.put('/:id', protect, admin, async (req, res) => {
-    const { employeeId, password, firstName, lastName, role, department, isActive, position, monthlySalary, overtimeHourlyRate } = req.body;
+    const { employeeId, password, firstName, lastName, role, department, isActive, position, dailySalary, overtimeHourlyRate } = req.body;
 
     try {
         const user = await User.findByPk(req.params.id);
@@ -99,7 +122,7 @@ router.put('/:id', protect, admin, async (req, res) => {
         if (department) user.department = department;
         if (isActive !== undefined) user.isActive = isActive;
         if (position !== undefined) user.position = position;
-        if (monthlySalary !== undefined) user.monthlySalary = monthlySalary;
+        if (dailySalary !== undefined) user.dailySalary = dailySalary;
         if (overtimeHourlyRate !== undefined) user.overtimeHourlyRate = overtimeHourlyRate;
 
         await user.save();
@@ -114,7 +137,7 @@ router.put('/:id', protect, admin, async (req, res) => {
                 role: user.role,
                 department: user.department,
                 position: user.position,
-                monthlySalary: user.monthlySalary,
+                dailySalary: user.dailySalary,
                 overtimeHourlyRate: user.overtimeHourlyRate,
                 isActive: user.isActive
             }
@@ -146,7 +169,7 @@ router.delete('/:id', protect, admin, async (req, res) => {
         console.log(`Deleting user ${user.id}...`);
         await user.destroy();
         console.log(`User ${user.id} deleted successfully`);
-        
+
         res.json({ message: 'User deleted successfully' });
     } catch (err) {
         console.error('Delete user error:', err);

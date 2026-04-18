@@ -54,6 +54,22 @@ const Shift = sequelize.define('Shift', {
     totalHours: {
         type: DataTypes.FLOAT,
         defaultValue: 0,
+    },
+    isHoliday: {
+        type: DataTypes.BOOLEAN,
+        defaultValue: false,
+    },
+    holidayType: {
+        type: DataTypes.ENUM('regular', 'special_non_working', 'special_working'),
+        allowNull: true,
+    },
+    holidayName: {
+        type: DataTypes.STRING,
+        allowNull: true,
+    },
+    notes: {
+        type: DataTypes.TEXT,
+        allowNull: true,
     }
 }, {
     timestamps: true,

@@ -2,7 +2,7 @@ import { RiUserLine } from 'react-icons/ri';
 import { RiUserAddLine } from 'react-icons/ri';
 import { RiBuilding2Line } from 'react-icons/ri';
 
-function EmployeeStats({ employees }) {
+function EmployeeStats({ employees, departments = [] }) {
   const stats = [
     {
       label: 'Total Employees',
@@ -21,7 +21,7 @@ function EmployeeStats({ employees }) {
     },
     {
       label: 'Departments',
-      value: [...new Set(employees.map(e => e.department))].length,
+      value: departments.length > 0 ? departments.length : [...new Set(employees.map(e => e.department))].filter(Boolean).length,
       icon: RiBuilding2Line,
     }
   ];

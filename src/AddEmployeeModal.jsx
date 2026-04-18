@@ -1,25 +1,22 @@
 import { useState, useEffect } from 'react';
 
-const DEPARTMENTS = ['IT', 'Marketing', 'HR'];
 const ROLES = [
   { value: 'employee', label: 'Employee' },
   { value: 'admin', label: 'Admin' }
 ];
 
 const initialFormState = {
-  employeeId: '',
-  password: '',
   firstName: '',
   lastName: '',
-  department: 'IT',
+  department: '',
   role: 'employee',
   isActive: true,
   position: '',
-  monthlySalary: '',
+  dailySalary: '',
   overtimeHourlyRate: ''
 };
 
-function AddEmployeeModal({ isOpen, onClose, onSubmit, loading, employee }) {
+function AddEmployeeModal({ isOpen, onClose, onSubmit, loading, employee, departments = [] }) {
   const [formData, setFormData] = useState(initialFormState);
   const [error, setError] = useState('');
   const isEditMode = !!employee;
@@ -32,17 +29,17 @@ function AddEmployeeModal({ isOpen, onClose, onSubmit, loading, employee }) {
         password: '',
         firstName: employee.firstName || '',
         lastName: employee.lastName || '',
-        department: employee.department || 'IT',
+        department: employee.department || (departments.length > 0 ? departments[0].name : ''),
         role: employee.role || 'employee',
         isActive: employee.isActive !== undefined ? employee.isActive : true,
         position: employee.position || '',
-        monthlySalary: employee.monthlySalary || '',
+        dailySalary: employee.dailySalary || '',
         overtimeHourlyRate: employee.overtimeHourlyRate || ''
       });
     } else {
       setFormData(initialFormState);
     }
-  }, [employee]);
+  }, [employee, departments]);
 
   const handleInputChange = (e) => {
     const { name, value, type, checked } = e.target;
@@ -91,44 +88,6 @@ function AddEmployeeModal({ isOpen, onClose, onSubmit, loading, employee }) {
             <div className="flex flex-col gap-4">
               <div className="grid grid-cols-2 gap-4">
                 <div className="flex flex-col gap-2">
-                  <label className="text-sm font-semibold text-slate-700">Employee ID</label>
-                  <input
-                    name="employeeId"
-                    value={formData.employeeId}
-                    onChange={handleInputChange}
-                    placeholder="e.g. EMP-006"
-                    className="w-full bg-slate-50 border border-slate-200 px-4 py-4 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all"
-                    required
-                  />
-                </div>
-                {!isEditMode && (
-                  <div className="flex flex-col gap-2">
-                    <label className="text-sm font-semibold text-slate-700">Password</label>
-                    <input
-                      name="password"
-                      type="password"
-                      value={formData.password}
-                      onChange={handleInputChange}
-                      placeholder="Enter password"
-                      className="w-full bg-slate-50 border border-slate-200 px-4 py-4 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all"
-                      required
-                    />
-                  </div>
-                )}
-                {isEditMode && (
-                  <div className="flex flex-col gap-2">
-                    <label className="text-sm font-semibold text-slate-700">Password</label>
-                    <input
-                      disabled
-                      placeholder="Not editable here"
-                      className="w-full bg-slate-100 border border-slate-200 px-4 py-4 rounded-xl text-sm text-slate-400 cursor-not-allowed"
-                    />
-                    <p className="text-xs text-slate-400 mt-1">Use Settings to change password</p>
-                  </div>
-                )}
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="flex flex-col gap-2">
                   <label className="text-sm font-semibold text-slate-700">First Name</label>
                   <input
                     name="firstName"
@@ -160,9 +119,13 @@ function AddEmployeeModal({ isOpen, onClose, onSubmit, loading, employee }) {
                     onChange={handleInputChange}
                     className="w-full bg-slate-50 border border-slate-200 px-4 py-4 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all"
                   >
-                    {DEPARTMENTS.map(dept => (
-                      <option key={dept} value={dept}>{dept}</option>
-                    ))}
+                    {departments.length > 0 ? (
+                      departments.map(dept => (
+                        <option key={dept.id || dept} value={dept.name}>{dept.name}</option>
+                      ))
+                    ) : (
+                      <option value="">No departments</option>
+                    )}
                   </select>
                 </div>
                 <div className="flex flex-col gap-2">
@@ -191,13 +154,13 @@ function AddEmployeeModal({ isOpen, onClose, onSubmit, loading, employee }) {
                   />
                 </div>
                 <div className="flex flex-col gap-2">
-                  <label className="text-sm font-semibold text-slate-700">Monthly Salary</label>
+                  <label className="text-sm font-semibold text-slate-700">Daily Salary</label>
                   <input
-                    name="monthlySalary"
+                    name="dailySalary"
                     type="number"
-                    value={formData.monthlySalary}
+                    value={formData.dailySalary}
                     onChange={handleInputChange}
-                    placeholder="e.g., 50000"
+                    placeholder="e.g., 2272.73"
                     step="0.01"
                     min="0"
                     className="w-full bg-slate-50 border border-slate-200 px-4 py-4 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all"
@@ -221,9 +184,9 @@ function AddEmployeeModal({ isOpen, onClose, onSubmit, loading, employee }) {
                   min="0"
                   className="w-full bg-slate-50 border border-slate-200 px-4 py-4 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all"
                 />
-                {formData.monthlySalary && (
+                {formData.dailySalary && (
                   <p className="text-xs text-slate-500">
-                    Hourly rate: ₱{(parseFloat(formData.monthlySalary) / 176).toFixed(2)}/hr
+                    Hourly rate: ₱{(parseFloat(formData.dailySalary) / 8).toFixed(2)}/hr
                   </p>
                 )}
               </div>

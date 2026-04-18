@@ -32,7 +32,7 @@ router.post('/login', async (req, res) => {
                 role: user.role,
                 department: user.department,
                 position: user.position,
-                monthlySalary: user.monthlySalary,
+                dailySalary: user.dailySalary,
                 overtimeHourlyRate: user.overtimeHourlyRate,
             },
         });

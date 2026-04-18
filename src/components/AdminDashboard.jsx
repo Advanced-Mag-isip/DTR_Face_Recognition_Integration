@@ -5,10 +5,13 @@ import { RiSettings4Line } from 'react-icons/ri';
 import { RiAddLine } from 'react-icons/ri';
 import { RiUserAddLine } from 'react-icons/ri';
 import { RiCloseLine } from 'react-icons/ri';
+import { RiCalendarLine } from 'react-icons/ri';
+import { RiBuildingLine } from 'react-icons/ri';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { getUsers, createUser, updateUser, deleteUser } from '../utils/usersApi';
 import { getShifts, addShift, updateShift, deleteShift } from '../utils/shiftApi';
+import { getDepartments } from '../utils/departmentApi';
 import SettingsModal from './SettingsModal';
 import AddShiftModal from './AddShiftModal';
 import ShiftTable from './ShiftTable';
@@ -22,6 +25,8 @@ import EmployeeFilters from './EmployeeFilters';
 import EmployeeTable from './EmployeeTable';
 import AddEmployeeModal from './AddEmployeeModal';
 import ViewTabs from './ViewTabs';
+import HolidayManagement from './HolidayManagement';
+import DepartmentManagement from './DepartmentManagement';
 
 const TABS = [
   { value: 'employees', label: 'Employee Management' },
@@ -36,12 +41,16 @@ function AdminDashboard() {
   const [showEmployeeHistoryModal, setShowEmployeeHistoryModal] = useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showHolidayManagement, setShowHolidayManagement] = useState(false);
+  const [showDepartmentManagement, setShowDepartmentManagement] = useState(false);
 
   // Data states
   const [employees, setEmployees] = useState([]);
   const [loadingEmployees, setLoadingEmployees] = useState(true);
   const [shifts, setShifts] = useState([]);
   const [loadingShifts, setLoadingShifts] = useState(true);
+  const [departments, setDepartments] = useState([]);
+  const [loadingDepartments, setLoadingDepartments] = useState(true);
 
   // Filter states
   const [currentView, setCurrentView] = useState('employees');
@@ -50,6 +59,19 @@ function AdminDashboard() {
   const [filterRole, setFilterRole] = useState('all');
   const [sortOrder, setSortOrder] = useState('newest');
   const [selectedMonth, setSelectedMonth] = useState('2026-03');
+
+  // Get current month helper
+  const getCurrentMonth = () => {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    return `${year}-${month}`;
+  };
+
+  // Reset to current month on mount
+  useEffect(() => {
+    setSelectedMonth(getCurrentMonth());
+  }, []);
 
   // Action states
   const [selectedEmployee, setSelectedEmployee] = useState(null);
@@ -75,7 +97,14 @@ function AdminDashboard() {
       getShifts()
         .then(setShifts)
         .catch(console.error)
-        .finally(() => setLoadingShifts(false))
+        .finally(() => setLoadingShifts(false)),
+      getDepartments()
+        .then((data) => {
+          console.log('Departments loaded:', data);
+          setDepartments(data);
+        })
+        .catch(console.error)
+        .finally(() => setLoadingDepartments(false))
     ]);
   }, []);
 
@@ -90,9 +119,12 @@ function AdminDashboard() {
     return matchesSearch && matchesDepartment && matchesRole;
   });
 
-  const departments = [...new Set(employees.map(e => e.department))];
+  // Get unique departments from both API and employees (for backward compatibility)
+  const departmentList = departments.length > 0 
+    ? departments 
+    : [...new Set(employees.map(e => e.department))].filter(Boolean).map(name => ({ id: 0, name }));
 
-  // Get shifts for specific employee
+  // Get shifts for specific employee (used in Employee Management modal)
   const getEmployeeShifts = (empId) => {
     if (!empId) return [];
     let empShifts = shifts.filter(s => s.employeeId === empId);
@@ -110,9 +142,9 @@ function AdminDashboard() {
     return empShifts;
   };
 
-  // Get filtered shifts
+  // Get filtered shifts - only for the logged-in user (admin)
   const getFilteredShifts = () => {
-    let filtered = [...shifts];
+    let filtered = shifts.filter(s => s.employeeId === user.id);
     if (selectedMonth) {
       filtered = filtered.filter(shift => {
         const shiftMonth = new Date(shift.date).toISOString().slice(0, 7);
@@ -194,7 +226,11 @@ function AdminDashboard() {
         setEditingShift(null);
       } else {
         const newShift = await addShift(savedShift);
-        setShifts(prev => [newShift, ...prev]);
+        console.log('New shift added:', newShift);
+        // Refresh shifts from API to ensure data is in sync
+        const updatedShifts = await getShifts();
+        console.log('Refreshed shifts:', updatedShifts);
+        setShifts(updatedShifts);
         setShowAddShiftModal(false);
         setEditingShift(null);
       }
@@ -236,6 +272,21 @@ function AdminDashboard() {
             <span className="text-sm text-slate-600">
               Hi, <strong className="text-slate-800">{user?.firstName || 'Admin'}</strong>
             </span>
+            <button
+              className="flex items-center gap-2 bg-blue-100 text-blue-700 px-4 py-2.5 rounded-xl text-sm font-semibold hover:bg-blue-200 transition-colors"
+              onClick={() => setShowHolidayManagement(true)}
+              title="Manage Holidays"
+            >
+              <RiCalendarLine className="w-5 h-5" />
+              <span className="hidden sm:inline">Holidays</span>
+            </button>
+            <button
+              className="flex items-center gap-2 bg-slate-100 text-slate-700 px-4 py-2.5 rounded-xl text-sm font-semibold hover:bg-slate-200 transition-colors"
+              onClick={() => setShowDepartmentManagement(true)}
+            >
+              <RiBuildingLine className="w-5 h-5" />
+              <span className="hidden sm:inline">Departments</span>
+            </button>
             <button
               className="flex items-center gap-2 bg-slate-100 text-slate-700 px-4 py-2.5 rounded-xl text-sm font-semibold hover:bg-slate-200 transition-colors"
               onClick={() => setShowSettings(true)}
@@ -282,7 +333,7 @@ function AdminDashboard() {
               </div>
 
               {/* Stats */}
-              <EmployeeStats employees={employees} />
+              <EmployeeStats employees={employees} departments={departments} />
 
               {/* Filters */}
               <EmployeeFilters
@@ -292,7 +343,7 @@ function AdminDashboard() {
                 setFilterDepartment={setFilterDepartment}
                 filterRole={filterRole}
                 setFilterRole={setFilterRole}
-                departments={departments}
+                departments={departmentList}
               />
 
               {/* Table */}
@@ -324,10 +375,10 @@ function AdminDashboard() {
 
               <StatsCards data={getFilteredShifts()} />
 
-              {(user?.monthlySalary && user.monthlySalary > 0) && (
+              {(user?.dailySalary && user.dailySalary > 0) && (
                 <div className="mt-8">
                   <SalaryReport
-                    monthlySalary={user.monthlySalary}
+                    dailySalary={user.dailySalary}
                     overtimeHourlyRate={user.overtimeHourlyRate}
                     shifts={getFilteredShifts()}
                   />
@@ -367,7 +418,7 @@ function AdminDashboard() {
                       setShiftToDelete(shift);
                       setShowDeleteShiftConfirm(true);
                     }}
-                    monthlySalary={user?.monthlySalary}
+                    dailySalary={user?.dailySalary}
                     overtimeHourlyRate={user?.overtimeHourlyRate}
                   />
                 )}
@@ -387,6 +438,7 @@ function AdminDashboard() {
         onSubmit={editingEmployee ? handleEditEmployee : handleAddEmployee}
         loading={editingEmployee ? updatingEmployee : addingEmployee}
         employee={editingEmployee}
+        departments={departmentList}
       />
 
       <AddShiftModal
@@ -404,6 +456,14 @@ function AdminDashboard() {
       <SettingsModal
         isOpen={showSettings}
         onClose={() => setShowSettings(false)}
+      />
+
+      <DepartmentManagement
+        isOpen={showDepartmentManagement}
+        onClose={() => setShowDepartmentManagement(false)}
+        onDepartmentsChange={() => {
+          getDepartments().then(setDepartments).catch(console.error);
+        }}
       />
 
       <ConfirmModal
@@ -429,22 +489,9 @@ function AdminDashboard() {
         disabled={deletingEmployee}
       />
 
-      <ConfirmModal
-        isOpen={showDeleteShiftConfirm}
-        onClose={() => {
-          setShowDeleteShiftConfirm(false);
-          setShiftToDelete(null);
-        }}
-        onConfirm={handleDeleteShift}
-        title="Delete Shift"
-        message={`Are you sure you want to delete the shift for <strong>${shiftToDelete?.date}</strong>? This action cannot be undone.`}
-        confirmText="Delete"
-        confirmClassName="bg-red-500 hover:bg-red-600"
-      />
-
       {/* Employee Shift History Modal */}
       {showEmployeeHistoryModal && selectedEmployee && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4" style={{ zIndex: 50 }}>
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-5xl flex flex-col max-h-[90vh]">
             <div className="p-6 border-b border-slate-100 flex items-center justify-between">
               <div>
@@ -481,12 +528,13 @@ function AdminDashboard() {
 
               <StatsCards data={getEmployeeShifts(selectedEmployee.id)} />
 
-              {(selectedEmployee.monthlySalary && selectedEmployee.monthlySalary > 0) && (
+              {(selectedEmployee.dailySalary && selectedEmployee.dailySalary > 0) && (
                 <div className="mt-8">
                   <SalaryReport
-                    monthlySalary={selectedEmployee.monthlySalary}
+                    dailySalary={selectedEmployee.dailySalary}
                     overtimeHourlyRate={selectedEmployee.overtimeHourlyRate}
                     shifts={getEmployeeShifts(selectedEmployee.id)}
+                    employeeId={selectedEmployee.id}
                   />
                 </div>
               )}
@@ -501,13 +549,84 @@ function AdminDashboard() {
                   setShiftToDelete(shift);
                   setShowDeleteShiftConfirm(true);
                 }}
-                monthlySalary={selectedEmployee.monthlySalary}
+                dailySalary={selectedEmployee.dailySalary}
                 overtimeHourlyRate={selectedEmployee.overtimeHourlyRate}
               />
             </div>
           </div>
         </div>
       )}
+
+      {/* Delete Shift Confirmation Modal - rendered after history modal with higher z-index */}
+      {showDeleteShiftConfirm && (
+        <div
+          className="fixed inset-0 bg-black/50 flex items-center justify-center p-4"
+          style={{ zIndex: 100 }}
+          onClick={() => {
+            setShowDeleteShiftConfirm(false);
+            setShiftToDelete(null);
+          }}
+        >
+          <div
+            className="bg-white rounded-2xl shadow-xl p-8 w-full max-w-sm flex flex-col gap-6"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between">
+              <h2 className="text-xl font-bold text-slate-800">Confirm Delete</h2>
+              <button
+                onClick={() => {
+                  setShowDeleteShiftConfirm(false);
+                  setShiftToDelete(null);
+                }}
+                className="text-slate-400 hover:text-slate-600 transition-colors"
+              >
+                <RiCloseLine className="w-6 h-6" />
+              </button>
+            </div>
+
+            <div className="flex flex-col gap-2">
+              <p className="text-sm text-slate-700">
+                Are you sure you want to delete the shift for{' '}
+                <span className="font-semibold text-slate-800">
+                  {shiftToDelete?.date ? new Date(shiftToDelete.date).toLocaleDateString('en-US', {
+                    year: 'numeric',
+                    month: 'short',
+                    day: 'numeric'
+                  }) : 'this date'}
+                </span>
+                ?
+              </p>
+              <p className="text-sm text-slate-500">
+                This action cannot be undone.
+              </p>
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                onClick={() => {
+                  setShowDeleteShiftConfirm(false);
+                  setShiftToDelete(null);
+                }}
+                className="flex-1 py-3 rounded-xl border border-slate-200 text-sm font-semibold text-slate-600 hover:bg-slate-50 transition"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDeleteShift}
+                className="flex-1 py-3 rounded-xl bg-red-500 text-white text-sm font-semibold hover:bg-red-600 transition"
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Holiday Management Modal */}
+      <HolidayManagement
+        isOpen={showHolidayManagement}
+        onClose={() => setShowHolidayManagement(false)}
+      />
     </div>
   );
 }

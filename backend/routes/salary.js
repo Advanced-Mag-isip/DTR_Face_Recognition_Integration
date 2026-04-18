@@ -13,22 +13,22 @@ const { protect } = require('../middleware/authMiddleware');
  */
 router.get('/compute', protect, async (req, res) => {
   const { startDate, endDate, employeeId } = req.query;
-  
+
   try {
     // Admin can view any employee, employees can only view their own
     const targetId = (req.user.role === 'admin' && employeeId) ? employeeId : req.user.id;
-    
+
     const user = await User.findByPk(targetId, {
-      attributes: ['id', 'firstName', 'lastName', 'employeeId', 'position', 'monthlySalary', 'overtimeHourlyRate', 'department']
+      attributes: ['id', 'firstName', 'lastName', 'employeeId', 'position', 'dailySalary', 'overtimeHourlyRate', 'department']
     });
-    
+
     if (!user) {
       return res.status(404).json({ message: 'User not found' });
     }
-    
-    if (!user.monthlySalary || user.monthlySalary <= 0) {
-      return res.status(400).json({ 
-        message: 'Monthly salary not set for this employee',
+
+    if (!user.dailySalary || user.dailySalary <= 0) {
+      return res.status(400).json({
+        message: 'Daily salary not set for this employee',
         employee: {
           id: user.id,
           name: `${user.firstName} ${user.lastName}`,
@@ -37,7 +37,7 @@ router.get('/compute', protect, async (req, res) => {
         }
       });
     }
-    
+
     // Build date range filter
     const whereClause = { employeeId: targetId };
     if (startDate && endDate) {
@@ -49,18 +49,18 @@ router.get('/compute', protect, async (req, res) => {
     } else if (endDate) {
       whereClause.date = { [Op.lte]: endDate };
     }
-    
+
     const shifts = await Shift.findAll({
       where: whereClause,
       order: [['date', 'DESC']]
     });
-    
+
     const salaryData = calculateMonthlySalary(
-      shifts, 
-      parseFloat(user.monthlySalary), 
+      shifts,
+      parseFloat(user.dailySalary),
       user.overtimeHourlyRate && parseFloat(user.overtimeHourlyRate)
     );
-    
+
     res.json({
       employee: {
         id: user.id,
@@ -71,7 +71,9 @@ router.get('/compute', protect, async (req, res) => {
       },
       period: { startDate, endDate },
       shiftsCount: shifts.length,
-      ...salaryData
+      dailySalary: parseFloat(user.dailySalary),
+      ...salaryData,
+      breakdown: salaryData.breakdown
     });
   } catch (err) {
     console.error('Salary computation error:', err);
@@ -85,21 +87,21 @@ router.get('/compute', protect, async (req, res) => {
  */
 router.get('/current-month', protect, async (req, res) => {
   const { employeeId } = req.query;
-  
+
   try {
     const targetId = (req.user.role === 'admin' && employeeId) ? employeeId : req.user.id;
-    
+
     const user = await User.findByPk(targetId, {
-      attributes: ['id', 'firstName', 'lastName', 'employeeId', 'position', 'monthlySalary', 'overtimeHourlyRate', 'department']
+      attributes: ['id', 'firstName', 'lastName', 'employeeId', 'position', 'dailySalary', 'overtimeHourlyRate', 'department']
     });
-    
+
     if (!user) {
       return res.status(404).json({ message: 'User not found' });
     }
-    
-    if (!user.monthlySalary || user.monthlySalary <= 0) {
-      return res.status(400).json({ 
-        message: 'Monthly salary not set for this employee',
+
+    if (!user.dailySalary || user.dailySalary <= 0) {
+      return res.status(400).json({
+        message: 'Daily salary not set for this employee',
         employee: {
           id: user.id,
           name: `${user.firstName} ${user.lastName}`,
@@ -108,14 +110,14 @@ router.get('/current-month', protect, async (req, res) => {
         }
       });
     }
-    
+
     // Get current month range
     const now = new Date();
     const year = now.getFullYear();
     const month = now.getMonth();
     const startDate = new Date(year, month, 1).toISOString().split('T')[0];
     const endDate = new Date(year, month + 1, 0).toISOString().split('T')[0];
-    
+
     const shifts = await Shift.findAll({
       where: {
         employeeId: targetId,
@@ -125,13 +127,13 @@ router.get('/current-month', protect, async (req, res) => {
       },
       order: [['date', 'DESC']]
     });
-    
+
     const salaryData = calculateMonthlySalary(
-      shifts, 
-      parseFloat(user.monthlySalary), 
+      shifts,
+      parseFloat(user.dailySalary),
       user.overtimeHourlyRate && parseFloat(user.overtimeHourlyRate)
     );
-    
+
     res.json({
       employee: {
         id: user.id,
@@ -140,13 +142,15 @@ router.get('/current-month', protect, async (req, res) => {
         position: user.position,
         department: user.department
       },
-      period: { 
-        startDate, 
+      period: {
+        startDate,
         endDate,
         month: now.toLocaleString('default', { month: 'long', year: 'numeric' })
       },
       shiftsCount: shifts.length,
-      ...salaryData
+      dailySalary: parseFloat(user.dailySalary),
+      ...salaryData,
+      breakdown: salaryData.breakdown
     });
   } catch (err) {
     console.error('Current month salary error:', err);

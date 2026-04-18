@@ -29,7 +29,12 @@ function EmployeeDashboard() {
     return `${year}-${month}`;
   };
 
-  const [selectedMonth, setSelectedMonth] = useState(getCurrentMonth);
+  const [selectedMonth, setSelectedMonth] = useState(getCurrentMonth());
+
+  // Reset to current month on mount
+  useEffect(() => {
+    setSelectedMonth(getCurrentMonth());
+  }, []);
 
   useEffect(() => {
     Promise.all([
@@ -45,10 +50,10 @@ function EmployeeDashboard() {
         .catch((err) => {
           console.error('Salary fetch error:', err);
           // If salary API fails but we have user data, use fallback
-          if (user?.monthlySalary && user.monthlySalary > 0) {
-            const hourlyRate = user.monthlySalary / 176;
+          if (user?.dailySalary && user.dailySalary > 0) {
+            const hourlyRate = user.dailySalary / 8;
             setSalaryData({
-              baseSalary: parseFloat(user.monthlySalary),
+              baseSalary: parseFloat(user.dailySalary),
               overtimeRate: user.overtimeHourlyRate > 0 ? parseFloat(user.overtimeHourlyRate) : hourlyRate
             });
           }
@@ -82,7 +87,11 @@ function EmployeeDashboard() {
         setEditingshift(null);
       } else {
         const newShift = await addShift(shiftData);
-        setShifts(prev => [newShift, ...prev]);
+        console.log('New shift added:', newShift);
+        // Refresh shifts from API to ensure data is in sync
+        const updatedShifts = await getShifts();
+        console.log('Refreshed shifts:', updatedShifts);
+        setShifts(updatedShifts);
         setShowAddModal(false);
       }
     } catch (err) {
@@ -124,7 +133,7 @@ function EmployeeDashboard() {
           {!loadingSalary && salaryData && (
             <div className="mt-6">
               <SalaryReport
-                monthlySalary={salaryData.baseSalary}
+                dailySalary={salaryData.dailySalary}
                 overtimeHourlyRate={salaryData.overtimeRate}
                 shifts={filteredData}
               />
@@ -145,12 +154,12 @@ function EmployeeDashboard() {
                 Loading shifts...
               </div>
             ) : (
-              <ShiftTable 
-                data={filteredData} 
-                onEdit={handleEdit} 
+              <ShiftTable
+                data={filteredData}
+                onEdit={handleEdit}
                 onDelete={handleDeleteClick}
-                monthlySalary={salaryData?.baseSalary}
-                overtimeHourlyRate={salaryData?.overtimeRate}
+                dailySalary={salaryData?.dailySalary || user?.dailySalary}
+                overtimeHourlyRate={salaryData?.overtimeRate || user?.overtimeHourlyRate}
               />
             )}
           </div>
@@ -165,6 +174,7 @@ function EmployeeDashboard() {
         }}
         onSave={handleSaveShift}
         editingshift={editingshift}
+        employeeId={user?.id}
       />
 
       <DeleteConfirmationModal

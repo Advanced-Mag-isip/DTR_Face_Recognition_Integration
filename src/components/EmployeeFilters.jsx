@@ -31,7 +31,7 @@ function EmployeeFilters({
         >
           <option value="all">All Departments</option>
           {departments.map(dept => (
-            <option key={dept} value={dept}>{dept}</option>
+            <option key={dept.id || dept} value={dept.name || dept}>{dept.name || dept}</option>
           ))}
         </select>
         {/* Role Filter */}

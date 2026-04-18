@@ -1,10 +1,13 @@
 import { RiCloseLine } from 'react-icons/ri';
 import { useState, useEffect } from 'react';
+import { checkHoliday } from '../utils/holidayApi';
 
 function AddShiftModal({ isOpen, onClose, onSave, editingshift, zIndex = 50, employeeId }) {
   const [includeOvertime, setIncludeOvertime] = useState(false);
   const [enableMorning, setEnableMorning] = useState(true);
   const [enableAfternoon, setEnableAfternoon] = useState(true);
+  const [holidayInfo, setHolidayInfo] = useState(null);
+  const [checkingHoliday, setCheckingHoliday] = useState(false);
   const [formData, setFormData] = useState({
     date: '',
     morningIn: '',
@@ -13,6 +16,7 @@ function AddShiftModal({ isOpen, onClose, onSave, editingshift, zIndex = 50, emp
     afternoonOut: '',
     overtimeStart: '',
     overtimeEnd: '',
+    notes: '',
   });
   const [error, setError] = useState('');
 
@@ -20,7 +24,7 @@ function AddShiftModal({ isOpen, onClose, onSave, editingshift, zIndex = 50, emp
     if (editingshift) {
       const hasMorning = !!(editingshift.morningTimeIn || editingshift.morningTimeOut);
       const hasAfternoon = !!(editingshift.afternoonTimeIn || editingshift.afternoonTimeOut);
-      
+
       setFormData({
         date: editingshift.date ? new Date(editingshift.date).toISOString().split('T')[0] : '',
         morningIn: editingshift.morningTimeIn || '',
@@ -29,10 +33,23 @@ function AddShiftModal({ isOpen, onClose, onSave, editingshift, zIndex = 50, emp
         afternoonOut: editingshift.afternoonTimeOut || '',
         overtimeStart: editingshift.overtimeTimeIn || '',
         overtimeEnd: editingshift.overtimeTimeOut || '',
+        notes: editingshift.notes || '',
       });
       setEnableMorning(hasMorning);
       setEnableAfternoon(hasAfternoon);
       setIncludeOvertime(!!editingshift.overtimeTimeIn);
+      
+      // Set holiday info if available
+      if (editingshift.isHoliday) {
+        setHolidayInfo({
+          isHoliday: true,
+          name: editingshift.holidayName,
+          type: editingshift.holidayType,
+          displayName: getHolidayDisplayName(editingshift.holidayType)
+        });
+      } else {
+        setHolidayInfo(null);
+      }
     } else {
       setFormData({
         date: '',
@@ -42,12 +59,46 @@ function AddShiftModal({ isOpen, onClose, onSave, editingshift, zIndex = 50, emp
         afternoonOut: '',
         overtimeStart: '',
         overtimeEnd: '',
+        notes: '',
       });
       setEnableMorning(true);
       setEnableAfternoon(true);
       setIncludeOvertime(false);
+      setHolidayInfo(null);
     }
   }, [editingshift]);
+
+  const getHolidayDisplayName = (type) => {
+    switch (type) {
+      case 'regular': return 'Regular Holiday';
+      case 'special_non_working': return 'Special Non-Working Holiday';
+      case 'special_working': return 'Special Working Holiday';
+      default: return null;
+    }
+  };
+
+  // Check if selected date is a holiday
+  useEffect(() => {
+    const checkDateHoliday = async () => {
+      if (!formData.date) {
+        setHolidayInfo(null);
+        return;
+      }
+      
+      setCheckingHoliday(true);
+      try {
+        const info = await checkHoliday(formData.date);
+        setHolidayInfo(info);
+      } catch (err) {
+        console.error('Error checking holiday:', err);
+        setHolidayInfo(null);
+      } finally {
+        setCheckingHoliday(false);
+      }
+    };
+
+    checkDateHoliday();
+  }, [formData.date]);
 
   const calculateHours = (startTime, endTime) => {
     if (!startTime || !endTime) return '0.0';
@@ -81,6 +132,7 @@ function AddShiftModal({ isOpen, onClose, onSave, editingshift, zIndex = 50, emp
       afternoonOut: enableAfternoon ? formData.afternoonOut : null,
       overtimeStart: includeOvertime ? formData.overtimeStart : null,
       overtimeEnd: includeOvertime ? formData.overtimeEnd : null,
+      notes: formData.notes,
     };
 
     // Validate that at least one shift period is filled
@@ -118,6 +170,7 @@ function AddShiftModal({ isOpen, onClose, onSave, editingshift, zIndex = 50, emp
       afternoonOut: '',
       overtimeStart: '',
       overtimeEnd: '',
+      notes: '',
     });
     setEnableMorning(true);
     setEnableAfternoon(true);
@@ -199,6 +252,24 @@ function AddShiftModal({ isOpen, onClose, onSave, editingshift, zIndex = 50, emp
                 required
                 className="bg-slate-50 border border-slate-200 px-4 py-3 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all"
               />
+              {checkingHoliday && (
+                <span className="text-xs text-slate-400">Checking holiday...</span>
+              )}
+              {holidayInfo && holidayInfo.isHoliday && (
+                <div className={`px-3 py-2 rounded-lg text-xs font-medium border ${
+                  holidayInfo.type === 'regular' ? 'bg-red-50 text-red-700 border-red-200' :
+                  holidayInfo.type === 'special_non_working' ? 'bg-orange-50 text-orange-700 border-orange-200' :
+                  'bg-blue-50 text-blue-700 border-blue-200'
+                }`}>
+                  🎄 {holidayInfo.name} - {holidayInfo.displayName}
+                  {holidayInfo.type === 'regular' && ' (2x pay)'}
+                  {holidayInfo.type === 'special_non_working' && ' (1.3x pay)'}
+                  {holidayInfo.type === 'special_working' && ' (normal pay)'}
+                </div>
+              )}
+              {formData.date && !checkingHoliday && !holidayInfo?.isHoliday && (
+                <span className="text-xs text-slate-400">Regular working day</span>
+              )}
             </div>
 
             {/* Morning Shift Toggle */}
@@ -361,6 +432,19 @@ function AddShiftModal({ isOpen, onClose, onSave, editingshift, zIndex = 50, emp
             <label htmlFor="includeOvertime" className="text-sm font-semibold text-slate-700 cursor-pointer">
               Include Overtime
             </label>
+          </div>
+
+          {/* Notes */}
+          <div className="flex flex-col gap-2 mb-6">
+            <label className="text-sm font-semibold text-slate-700">Notes</label>
+            <textarea
+              name="notes"
+              value={formData.notes}
+              onChange={handleInputChange}
+              rows={3}
+              placeholder="Add any notes about this shift..."
+              className="bg-slate-50 border border-slate-200 px-4 py-3 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all resize-none"
+            />
           </div>
 
           {/* Form Actions */}

@@ -30,8 +30,17 @@ const User = sequelize.define('User', {
       isIn: [['employee', 'admin']]
     }
   },
-  department: { 
-    type: DataTypes.STRING 
+  departmentId: {
+    type: DataTypes.INTEGER,
+    allowNull: true,
+    references: {
+      model: 'departments',
+      key: 'id'
+    }
+  },
+  department: {
+    type: DataTypes.STRING,
+    allowNull: true
   },
   isActive: {
     type: DataTypes.BOOLEAN,
@@ -42,7 +51,7 @@ const User = sequelize.define('User', {
     allowNull: true,
     trim: true
   },
-  monthlySalary: {
+  dailySalary: {
     type: DataTypes.DECIMAL(10, 2),
     allowNull: true,
     defaultValue: 0.0

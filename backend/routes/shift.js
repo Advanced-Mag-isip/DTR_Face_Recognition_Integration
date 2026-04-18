@@ -2,6 +2,8 @@ const express = require('express');
 const router = express.Router();
 const Shift = require('../models/Shift');
 const User = require('../models/User');
+const Holiday = require('../models/Holiday');
+const { Op } = require('sequelize');
 const { protect, admin } = require('../middleware/authMiddleware');
 
 const calcHours = (start, end) => {
@@ -12,9 +14,30 @@ const calcHours = (start, end) => {
     return parseFloat((diff / 60).toFixed(2));
 };
 
+// Helper function to check if a date is a holiday
+const checkHoliday = async (date) => {
+    try {
+        const holiday = await Holiday.findOne({ where: { date } });
+        if (holiday) {
+            return {
+                isHoliday: true,
+                holidayType: holiday.type,
+                holidayName: holiday.name
+            };
+        }
+    } catch (err) {
+        console.error('Error checking holiday:', err);
+    }
+    return {
+        isHoliday: false,
+        holidayType: null,
+        holidayName: null
+    };
+};
+
 // Create shift - for self or admin for employee
 router.post('/', protect, async (req, res) => {
-    const { date, morningIn, morningOut, afternoonIn, afternoonOut, overtimeStart, overtimeEnd, employeeId } = req.body;
+    const { date, morningIn, morningOut, afternoonIn, afternoonOut, overtimeStart, overtimeEnd, employeeId, notes } = req.body;
 
     console.log('POST /shifts received:', { date, employeeId, admin: req.user.role });
 
@@ -53,6 +76,9 @@ router.post('/', protect, async (req, res) => {
         const overtimeHours = calcHours(overtimeStart, overtimeEnd);
         const totalHours = morningHours + afternoonHours + overtimeHours;
 
+        // Check if the date is a holiday
+        const holidayInfo = await checkHoliday(date);
+
         const shift = await Shift.create({
             employeeId: targetEmployeeId,
             date,
@@ -66,6 +92,10 @@ router.post('/', protect, async (req, res) => {
             overtimeTimeOut: overtimeEnd || null,
             overtimeHours,
             totalHours,
+            notes: notes || null,
+            isHoliday: holidayInfo.isHoliday,
+            holidayType: holidayInfo.holidayType,
+            holidayName: holidayInfo.holidayName,
         });
 
         res.status(201).json({
@@ -82,6 +112,10 @@ router.post('/', protect, async (req, res) => {
             overtimeTimeOut: shift.overtimeTimeOut,
             overtimeHours: shift.overtimeHours,
             totalHours: shift.totalHours,
+            notes: shift.notes,
+            isHoliday: shift.isHoliday,
+            holidayType: shift.holidayType,
+            holidayName: shift.holidayName,
         });
     } catch (err) {
         console.error('Shift creation error:', err);
@@ -121,6 +155,10 @@ router.get('/', protect, async (req, res) => {
             overtimeTimeOut: s.overtimeTimeOut,
             overtimeHours: s.overtimeHours,
             totalHours: s.totalHours,
+            notes: s.notes,
+            isHoliday: s.isHoliday,
+            holidayType: s.holidayType,
+            holidayName: s.holidayName,
             createdAt: s.createdAt,
             updatedAt: s.updatedAt
         })));
@@ -131,7 +169,7 @@ router.get('/', protect, async (req, res) => {
 
 // Update shift
 router.put('/:id', protect, async (req, res) => {
-    const { date, morningIn, morningOut, afternoonIn, afternoonOut, overtimeStart, overtimeEnd } = req.body;
+    const { date, morningIn, morningOut, afternoonIn, afternoonOut, overtimeStart, overtimeEnd, notes } = req.body;
 
     console.log('PUT /shifts/:id received:', req.params.id, req.body);
 
@@ -147,6 +185,20 @@ router.put('/:id', protect, async (req, res) => {
             return res.status(403).json({ message: 'Not authorized to edit this shift' });
         }
 
+        // Check for duplicate date (excluding current shift)
+        const existing = await Shift.findOne({
+            where: {
+                employeeId: shift.employeeId,
+                date,
+                id: { [Op.ne]: shift.id }
+            }
+        });
+
+        if (existing) {
+            console.log('Shift already exists for this date');
+            return res.status(400).json({ message: 'A shift for this day already exists.' });
+        }
+
         // Validate that at least one shift period is provided
         if ((!morningIn || !morningOut) && (!afternoonIn || !afternoonOut)) {
             return res.status(400).json({ message: 'Please provide at least Morning or Afternoon shift times' });
@@ -156,6 +208,9 @@ router.put('/:id', protect, async (req, res) => {
         const afternoonHours = calcHours(afternoonIn, afternoonOut);
         const overtimeHours = calcHours(overtimeStart, overtimeEnd);
         const totalHours = morningHours + afternoonHours + overtimeHours;
+
+        // Check if the date is a holiday
+        const holidayInfo = await checkHoliday(date);
 
         shift.date = date;
         shift.morningTimeIn = morningIn || null;
@@ -168,6 +223,10 @@ router.put('/:id', protect, async (req, res) => {
         shift.overtimeTimeOut = overtimeEnd || null;
         shift.overtimeHours = overtimeHours;
         shift.totalHours = totalHours;
+        shift.notes = notes || null;
+        shift.isHoliday = holidayInfo.isHoliday;
+        shift.holidayType = holidayInfo.holidayType;
+        shift.holidayName = holidayInfo.holidayName;
 
         await shift.save();
 
@@ -187,6 +246,10 @@ router.put('/:id', protect, async (req, res) => {
             overtimeTimeOut: shift.overtimeTimeOut,
             overtimeHours: shift.overtimeHours,
             totalHours: shift.totalHours,
+            notes: shift.notes,
+            isHoliday: shift.isHoliday,
+            holidayType: shift.holidayType,
+            holidayName: shift.holidayName,
         });
     } catch (err) {
         console.error('Shift update error:', err);
