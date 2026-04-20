@@ -4,6 +4,30 @@
 const WORKING_HOURS_PER_DAY = 8;
 
 /**
+ * Working days per month (for monthly calculations)
+ */
+const WORKING_DAYS_PER_MONTH = 26;
+
+/**
+ * Get hourly and daily rates based on payment type
+ * @param {string} paymentType - 'hourly' or 'monthly'
+ * @param {number} hourlyRate - Direct hourly rate (for hourly workers)
+ * @param {number} monthlySalary - Monthly salary (for monthly workers)
+ * @returns {Object} { hourlyRate, dailyRate }
+ */
+const getRatesByPaymentType = (paymentType, hourlyRate, monthlySalary) => {
+  if (paymentType === 'monthly' && monthlySalary && monthlySalary > 0) {
+    const dailyRate = monthlySalary / WORKING_DAYS_PER_MONTH;
+    const hourly = dailyRate / WORKING_HOURS_PER_DAY;
+    return { hourlyRate: hourly, dailyRate };
+  }
+  
+  // For hourly workers or fallback
+  const hourly = hourlyRate && hourlyRate > 0 ? hourlyRate : 0;
+  return { hourlyRate: hourly, dailyRate: hourly * WORKING_HOURS_PER_DAY };
+};
+
+/**
  * Holiday pay multipliers
  */
 const HOLIDAY_MULTIPLIERS = {
@@ -24,7 +48,7 @@ const getHolidayMultiplier = (holidayType) => {
 };
 
 /**
- * Derive hourly rate from daily salary
+ * Derive hourly rate from daily salary (legacy support)
  * @param {number} dailySalary - The employee's daily salary
  * @returns {number} Hourly rate
  */
@@ -34,18 +58,40 @@ const deriveHourlyRate = (dailySalary) => {
 };
 
 /**
+ * Get rates for salary calculation
+ * @param {string} paymentType - 'hourly' or 'monthly'
+ * @param {number} hourlyRate - Direct hourly rate
+ * @param {number} monthlySalary - Monthly salary
+ * @param {number} overtimeHourlyRate - Overtime rate
+ * @returns {Object} { hourlyRate, dailyRate, overtimeRate }
+ */
+const getCalculationRates = (paymentType, hourlyRate, monthlySalary, overtimeHourlyRate) => {
+  const { hourlyRate: baseHourly, dailyRate } = getRatesByPaymentType(paymentType, hourlyRate, monthlySalary);
+  
+  const otRate = overtimeHourlyRate && overtimeHourlyRate > 0
+    ? overtimeHourlyRate
+    : baseHourly;
+  
+  return {
+    hourlyRate: baseHourly,
+    dailyRate,
+    overtimeRate: otRate
+  };
+};
+
+/**
  * Calculate salary for a single shift with holiday consideration
  * @param {Object} shift - Shift object with morningHours, afternoonHours, overtimeHours, holidayType
- * @param {number} dailySalary - Employee's daily salary
+ * @param {string} paymentType - 'hourly' or 'monthly'
+ * @param {number} hourlyRate - Employee's hourly rate (for hourly workers)
+ * @param {number} monthlySalary - Employee's monthly salary (for monthly workers)
  * @param {number} overtimeHourlyRate - Optional overtime hourly rate (auto-calculated if not provided)
  * @returns {Object} Salary breakdown for the shift
  */
-const calculateShiftSalary = (shift, dailySalary, overtimeHourlyRate) => {
-  const hourlyRate = deriveHourlyRate(dailySalary);
-  // Overtime rate equals regular hourly rate (1:1)
-  const otRate = overtimeHourlyRate && overtimeHourlyRate > 0
-    ? overtimeHourlyRate
-    : hourlyRate;
+const calculateShiftSalary = (shift, paymentType, hourlyRate, monthlySalary, overtimeHourlyRate) => {
+  const { hourlyRate: baseHourly, overtimeRate: otRate } = getCalculationRates(
+    paymentType, hourlyRate, monthlySalary, overtimeHourlyRate
+  );
 
   const regularHours = (shift.morningHours || 0) + (shift.afternoonHours || 0);
   const overtimeHours = shift.overtimeHours || 0;
@@ -54,7 +100,7 @@ const calculateShiftSalary = (shift, dailySalary, overtimeHourlyRate) => {
   const holidayMultiplier = getHolidayMultiplier(shift.holidayType);
   
   // Calculate base pay for regular hours
-  const baseRegularPay = regularHours * hourlyRate;
+  const baseRegularPay = regularHours * baseHourly;
   
   // Calculate holiday premium (extra pay portion)
   const holidayPremium = baseRegularPay * (holidayMultiplier - 1);
@@ -68,7 +114,7 @@ const calculateShiftSalary = (shift, dailySalary, overtimeHourlyRate) => {
   return {
     regularHours,
     overtimeHours,
-    hourlyRate: parseFloat(hourlyRate.toFixed(2)),
+    hourlyRate: parseFloat(baseHourly.toFixed(2)),
     overtimeRate: parseFloat(otRate.toFixed(2)),
     holidayMultiplier: parseFloat(holidayMultiplier.toFixed(2)),
     baseRegularPay: parseFloat(baseRegularPay.toFixed(2)),
@@ -85,16 +131,19 @@ const calculateShiftSalary = (shift, dailySalary, overtimeHourlyRate) => {
 /**
  * Calculate salary based on actual days worked with holiday breakdown
  * @param {Array} shifts - Array of shift objects
- * @param {number} dailySalary - Employee's daily salary
+ * @param {string} paymentType - 'hourly' or 'monthly'
+ * @param {number} hourlyRate - Employee's hourly rate (for hourly workers)
+ * @param {number} monthlySalary - Employee's monthly salary (for monthly workers)
  * @param {number} overtimeHourlyRate - Optional overtime hourly rate
  * @returns {Object} Complete salary breakdown with holiday categories
  */
-const calculateMonthlySalary = (shifts, dailySalary, overtimeHourlyRate) => {
-  const hourlyRate = deriveHourlyRate(dailySalary);
-  // Overtime rate equals regular hourly rate (1:1)
+const calculateMonthlySalary = (shifts, paymentType, hourlyRate, monthlySalary, overtimeHourlyRate) => {
+  const { hourlyRate: baseHourly, dailyRate } = getCalculationRates(
+    paymentType, hourlyRate, monthlySalary, overtimeHourlyRate
+  );
   const otRate = overtimeHourlyRate && overtimeHourlyRate > 0
     ? overtimeHourlyRate
-    : hourlyRate;
+    : baseHourly;
 
   let totalRegularHours = 0;
   let totalOvertimeHours = 0;
@@ -141,7 +190,7 @@ const calculateMonthlySalary = (shifts, dailySalary, overtimeHourlyRate) => {
       }
     });
 
-    const basePay = categoryRegularHours * hourlyRate;
+    const basePay = categoryRegularHours * baseHourly;
     const holidayPremium = basePay * (multiplier - 1);
     const regularPay = basePay + holidayPremium;
     const overtimePay = categoryOvertimeHours * otRate;
@@ -178,7 +227,8 @@ const calculateMonthlySalary = (shifts, dailySalary, overtimeHourlyRate) => {
     daysWorked,
     totalRegularHours: parseFloat(totalRegularHours.toFixed(2)),
     totalOvertimeHours: parseFloat(totalOvertimeHours.toFixed(2)),
-    hourlyRate: parseFloat(hourlyRate.toFixed(2)),
+    hourlyRate: parseFloat(baseHourly.toFixed(2)),
+    dailyRate: parseFloat(dailyRate.toFixed(2)),
     overtimeRate: parseFloat(otRate.toFixed(2)),
     overtimePay: parseFloat(totalOvertimePay.toFixed(2)),
     grossPay: parseFloat(grossPay.toFixed(2)),
@@ -224,7 +274,10 @@ module.exports = {
   calculateShiftSalary,
   calculateMonthlySalary,
   deriveHourlyRate,
+  getRatesByPaymentType,
+  getCalculationRates,
   getHolidayMultiplier,
   HOLIDAY_MULTIPLIERS,
-  WORKING_HOURS_PER_DAY
+  WORKING_HOURS_PER_DAY,
+  WORKING_DAYS_PER_MONTH
 };

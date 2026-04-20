@@ -70,6 +70,14 @@ const Shift = sequelize.define('Shift', {
     notes: {
         type: DataTypes.TEXT,
         allowNull: true,
+    },
+    isPaid: {
+        type: DataTypes.BOOLEAN,
+        defaultValue: false,
+    },
+    paidAt: {
+        type: DataTypes.DATE,
+        allowNull: true,
     }
 }, {
     timestamps: true,

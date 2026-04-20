@@ -136,6 +136,9 @@ function EmployeeDashboard() {
                 dailySalary={salaryData.dailySalary}
                 overtimeHourlyRate={salaryData.overtimeRate}
                 shifts={filteredData}
+                paymentType={salaryData.paymentType}
+                hourlyRate={salaryData.hourlyRate}
+                monthlySalary={salaryData.monthlySalary}
               />
             </div>
           )}
@@ -160,6 +163,9 @@ function EmployeeDashboard() {
                 onDelete={handleDeleteClick}
                 dailySalary={salaryData?.dailySalary || user?.dailySalary}
                 overtimeHourlyRate={salaryData?.overtimeRate || user?.overtimeHourlyRate}
+                paymentType={salaryData?.paymentType || user?.paymentType}
+                hourlyRate={salaryData?.hourlyRate || user?.hourlyRate}
+                monthlySalary={salaryData?.monthlySalary || user?.monthlySalary}
               />
             )}
           </div>

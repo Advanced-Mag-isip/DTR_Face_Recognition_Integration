@@ -18,7 +18,7 @@ const getHolidayDisplayName = (type) => {
   }
 };
 
-function ShiftTable({ data, onEdit, onDelete, dailySalary, overtimeHourlyRate }) {
+function ShiftTable({ data, onEdit, onDelete, dailySalary, overtimeHourlyRate, paymentType, hourlyRate: propHourlyRate, monthlySalary: propMonthlySalary }) {
   const [showNotesModal, setShowNotesModal] = useState(false);
   const [selectedNotes, setSelectedNotes] = useState('');
   const [selectedShift, setSelectedShift] = useState(null);
@@ -49,10 +49,22 @@ function ShiftTable({ data, onEdit, onDelete, dailySalary, overtimeHourlyRate })
     // Convert to number in case it's a string from database
     const salary = typeof dailySalary === 'string' ? parseFloat(dailySalary) : dailySalary;
     const otRateValue = typeof overtimeHourlyRate === 'string' ? parseFloat(overtimeHourlyRate) : overtimeHourlyRate;
+    const hourly = typeof propHourlyRate === 'string' ? parseFloat(propHourlyRate) : propHourlyRate;
+    const monthly = typeof propMonthlySalary === 'string' ? parseFloat(propMonthlySalary) : propMonthlySalary;
+    const payType = paymentType || 'hourly';
 
-    if (!salary || salary <= 0) return null;
+    let hourlyRate = 0;
+    
+    if (payType === 'monthly' && monthly > 0) {
+      hourlyRate = (monthly / 26) / 8; // monthly / 26 days / 8 hours
+    } else if (hourly > 0) {
+      hourlyRate = hourly;
+    } else if (salary > 0) {
+      hourlyRate = salary / 8; // fallback to legacy calculation
+    }
 
-    const hourlyRate = salary / 8; // 8 hours per day
+    if (hourlyRate <= 0) return null;
+
     // Overtime rate equals regular hourly rate (1:1)
     const otRate = otRateValue && otRateValue > 0
       ? otRateValue

@@ -30,8 +30,8 @@ function EmployeeFilters({
           className="bg-slate-50 border border-slate-200 px-4 py-3 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all"
         >
           <option value="all">All Departments</option>
-          {departments.map(dept => (
-            <option key={dept.id || dept} value={dept.name || dept}>{dept.name || dept}</option>
+          {departments.map((dept, index) => (
+            <option key={dept?.id || dept?.name || index} value={dept?.name || dept}>{dept?.name || dept}</option>
           ))}
         </select>
         {/* Role Filter */}

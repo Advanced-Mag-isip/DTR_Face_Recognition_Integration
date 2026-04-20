@@ -381,6 +381,9 @@ function AdminDashboard() {
                     dailySalary={user.dailySalary}
                     overtimeHourlyRate={user.overtimeHourlyRate}
                     shifts={getFilteredShifts()}
+                    paymentType={user.paymentType}
+                    hourlyRate={user.hourlyRate}
+                    monthlySalary={user.monthlySalary}
                   />
                 </div>
               )}
@@ -420,6 +423,9 @@ function AdminDashboard() {
                     }}
                     dailySalary={user?.dailySalary}
                     overtimeHourlyRate={user?.overtimeHourlyRate}
+                    paymentType={user?.paymentType}
+                    hourlyRate={user?.hourlyRate}
+                    monthlySalary={user?.monthlySalary}
                   />
                 )}
               </div>
@@ -535,6 +541,9 @@ function AdminDashboard() {
                     overtimeHourlyRate={selectedEmployee.overtimeHourlyRate}
                     shifts={getEmployeeShifts(selectedEmployee.id)}
                     employeeId={selectedEmployee.id}
+                    paymentType={selectedEmployee.paymentType}
+                    hourlyRate={selectedEmployee.hourlyRate}
+                    monthlySalary={selectedEmployee.monthlySalary}
                   />
                 </div>
               )}
@@ -551,6 +560,9 @@ function AdminDashboard() {
                 }}
                 dailySalary={selectedEmployee.dailySalary}
                 overtimeHourlyRate={selectedEmployee.overtimeHourlyRate}
+                paymentType={selectedEmployee.paymentType}
+                hourlyRate={selectedEmployee.hourlyRate}
+                monthlySalary={selectedEmployee.monthlySalary}
               />
             </div>
           </div>

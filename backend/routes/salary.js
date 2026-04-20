@@ -19,21 +19,40 @@ router.get('/compute', protect, async (req, res) => {
     const targetId = (req.user.role === 'admin' && employeeId) ? employeeId : req.user.id;
 
     const user = await User.findByPk(targetId, {
-      attributes: ['id', 'firstName', 'lastName', 'employeeId', 'position', 'dailySalary', 'overtimeHourlyRate', 'department']
+      attributes: ['id', 'firstName', 'lastName', 'employeeId', 'position', 'dailySalary', 'hourlyRate', 'monthlySalary', 'overtimeHourlyRate', 'department', 'paymentType']
     });
 
     if (!user) {
       return res.status(404).json({ message: 'User not found' });
     }
 
-    if (!user.dailySalary || user.dailySalary <= 0) {
+    const paymentType = user.paymentType || 'hourly';
+    const hourlyRate = parseFloat(user.hourlyRate) || 0;
+    const monthlySalary = parseFloat(user.monthlySalary) || 0;
+    const dailySalary = parseFloat(user.dailySalary) || 0;
+
+    if (paymentType === 'hourly' && hourlyRate <= 0 && dailySalary <= 0) {
       return res.status(400).json({
-        message: 'Daily salary not set for this employee',
+        message: 'Hourly rate not set for this employee',
         employee: {
           id: user.id,
           name: `${user.firstName} ${user.lastName}`,
           employeeId: user.employeeId,
-          position: user.position
+          position: user.position,
+          paymentType
+        }
+      });
+    }
+
+    if (paymentType === 'monthly' && monthlySalary <= 0 && dailySalary <= 0) {
+      return res.status(400).json({
+        message: 'Monthly salary not set for this employee',
+        employee: {
+          id: user.id,
+          name: `${user.firstName} ${user.lastName}`,
+          employeeId: user.employeeId,
+          position: user.position,
+          paymentType
         }
       });
     }
@@ -57,7 +76,9 @@ router.get('/compute', protect, async (req, res) => {
 
     const salaryData = calculateMonthlySalary(
       shifts,
-      parseFloat(user.dailySalary),
+      paymentType,
+      hourlyRate,
+      monthlySalary,
       user.overtimeHourlyRate && parseFloat(user.overtimeHourlyRate)
     );
 
@@ -67,11 +88,14 @@ router.get('/compute', protect, async (req, res) => {
         name: `${user.firstName} ${user.lastName}`,
         employeeId: user.employeeId,
         position: user.position,
-        department: user.department
+        department: user.department,
+        paymentType
       },
       period: { startDate, endDate },
       shiftsCount: shifts.length,
-      dailySalary: parseFloat(user.dailySalary),
+      hourlyRate,
+      monthlySalary,
+      dailySalary,
       ...salaryData,
       breakdown: salaryData.breakdown
     });
@@ -92,21 +116,40 @@ router.get('/current-month', protect, async (req, res) => {
     const targetId = (req.user.role === 'admin' && employeeId) ? employeeId : req.user.id;
 
     const user = await User.findByPk(targetId, {
-      attributes: ['id', 'firstName', 'lastName', 'employeeId', 'position', 'dailySalary', 'overtimeHourlyRate', 'department']
+      attributes: ['id', 'firstName', 'lastName', 'employeeId', 'position', 'dailySalary', 'hourlyRate', 'monthlySalary', 'overtimeHourlyRate', 'department', 'paymentType']
     });
 
     if (!user) {
       return res.status(404).json({ message: 'User not found' });
     }
 
-    if (!user.dailySalary || user.dailySalary <= 0) {
+    const paymentType = user.paymentType || 'hourly';
+    const hourlyRate = parseFloat(user.hourlyRate) || 0;
+    const monthlySalary = parseFloat(user.monthlySalary) || 0;
+    const dailySalary = parseFloat(user.dailySalary) || 0;
+
+    if (paymentType === 'hourly' && hourlyRate <= 0 && dailySalary <= 0) {
       return res.status(400).json({
-        message: 'Daily salary not set for this employee',
+        message: 'Hourly rate not set for this employee',
         employee: {
           id: user.id,
           name: `${user.firstName} ${user.lastName}`,
           employeeId: user.employeeId,
-          position: user.position
+          position: user.position,
+          paymentType
+        }
+      });
+    }
+
+    if (paymentType === 'monthly' && monthlySalary <= 0 && dailySalary <= 0) {
+      return res.status(400).json({
+        message: 'Monthly salary not set for this employee',
+        employee: {
+          id: user.id,
+          name: `${user.firstName} ${user.lastName}`,
+          employeeId: user.employeeId,
+          position: user.position,
+          paymentType
         }
       });
     }
@@ -130,7 +173,9 @@ router.get('/current-month', protect, async (req, res) => {
 
     const salaryData = calculateMonthlySalary(
       shifts,
-      parseFloat(user.dailySalary),
+      paymentType,
+      hourlyRate,
+      monthlySalary,
       user.overtimeHourlyRate && parseFloat(user.overtimeHourlyRate)
     );
 
@@ -140,7 +185,8 @@ router.get('/current-month', protect, async (req, res) => {
         name: `${user.firstName} ${user.lastName}`,
         employeeId: user.employeeId,
         position: user.position,
-        department: user.department
+        department: user.department,
+        paymentType
       },
       period: {
         startDate,
@@ -148,7 +194,9 @@ router.get('/current-month', protect, async (req, res) => {
         month: now.toLocaleString('default', { month: 'long', year: 'numeric' })
       },
       shiftsCount: shifts.length,
-      dailySalary: parseFloat(user.dailySalary),
+      hourlyRate,
+      monthlySalary,
+      dailySalary,
       ...salaryData,
       breakdown: salaryData.breakdown
     });

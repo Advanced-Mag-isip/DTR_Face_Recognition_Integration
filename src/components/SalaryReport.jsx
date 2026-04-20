@@ -4,7 +4,7 @@ import { RiInformationLine } from 'react-icons/ri';
 import { getCurrentMonthRange } from '../utils/dateUtils';
 import { getSalaryForPeriod } from '../utils/salaryApi';
 
-function SalaryReport({ dailySalary, overtimeHourlyRate, shifts, employeeId }) {
+function SalaryReport({ dailySalary, overtimeHourlyRate, shifts, employeeId, paymentType, hourlyRate: propHourlyRate, monthlySalary: propMonthlySalary }) {
   const [salaryData, setSalaryData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [showBreakdown, setShowBreakdown] = useState(false);
@@ -27,10 +27,22 @@ function SalaryReport({ dailySalary, overtimeHourlyRate, shifts, employeeId }) {
     const calculateLocalSalary = () => {
       const salary = typeof dailySalary === 'string' ? parseFloat(dailySalary) : dailySalary;
       const otRateValue = typeof overtimeHourlyRate === 'string' ? parseFloat(overtimeHourlyRate) : overtimeHourlyRate;
+      const hourly = typeof propHourlyRate === 'string' ? parseFloat(propHourlyRate) : propHourlyRate;
+      const monthly = typeof propMonthlySalary === 'string' ? parseFloat(propMonthlySalary) : propMonthlySalary;
+      const payType = paymentType || 'hourly';
 
-      if (!salary || salary <= 0) return;
+      let hourlyRate = 0;
+      
+      if (payType === 'monthly' && monthly > 0) {
+        hourlyRate = (monthly / 26) / 8; // monthly / 26 days / 8 hours
+      } else if (hourly > 0) {
+        hourlyRate = hourly;
+      } else if (salary > 0) {
+        hourlyRate = salary / 8; // fallback to legacy calculation
+      }
 
-      const hourlyRate = salary / 8;
+      if (hourlyRate <= 0) return;
+
       const otRate = otRateValue && otRateValue > 0 ? otRateValue : hourlyRate;
 
       let totalRegularHours = 0;
@@ -46,7 +58,6 @@ function SalaryReport({ dailySalary, overtimeHourlyRate, shifts, employeeId }) {
       });
 
       const daysWorked = uniqueWorkDays.size;
-      // FIX: Calculate based on actual hours worked, not days worked
       const regularPay = totalRegularHours * hourlyRate;
       const overtimePay = totalOvertimeHours * otRate;
       const currentMonthPay = regularPay + overtimePay;
@@ -62,6 +73,8 @@ function SalaryReport({ dailySalary, overtimeHourlyRate, shifts, employeeId }) {
         grossPay: parseFloat(currentMonthPay.toFixed(2)),
         baseSalary: parseFloat(regularPay.toFixed(2)),
         dailySalary: salary,
+        monthlySalary: monthly,
+        paymentType: payType,
         breakdown: {
           normal: { label: 'Normal Days', daysWorked, totalPay: parseFloat(regularPay.toFixed(2)) },
           regular: { label: 'Regular Holidays', daysWorked: 0, totalPay: 0 },
@@ -72,7 +85,7 @@ function SalaryReport({ dailySalary, overtimeHourlyRate, shifts, employeeId }) {
     };
 
     fetchSalaryData();
-  }, [dailySalary, overtimeHourlyRate, shifts, employeeId]);
+  }, [dailySalary, overtimeHourlyRate, shifts, employeeId, paymentType, propHourlyRate, propMonthlySalary]);
 
   if (loading) {
     return (
@@ -87,13 +100,26 @@ function SalaryReport({ dailySalary, overtimeHourlyRate, shifts, employeeId }) {
 
   if (!salaryData) return null;
 
-  // Use dailySalary from API data if available, otherwise fall back to prop
+  // Use data from API if available, otherwise fall back to props
   const salary = salaryData.dailySalary || (typeof dailySalary === 'string' ? parseFloat(dailySalary) : dailySalary);
   
-  if (!salary || salary <= 0) {
+  // Payment type - must be defined before use
+  const payType = salaryData.paymentType || paymentType || 'hourly';
+  const displayHourlyRate = salaryData.hourlyRate || propHourlyRate || (salaryData.dailyRate ? salaryData.dailyRate / 8 : 0);
+  const displayMonthlySalary = salaryData.monthlySalary || propMonthlySalary || 0;
+  const displayDailyRate = salaryData.dailyRate || (displayHourlyRate * 8);
+  
+  // Validate based on payment type
+  const isValidSalary = payType === 'monthly' 
+    ? (displayMonthlySalary > 0 || salary > 0)
+    : (displayHourlyRate > 0 || salary > 0);
+  
+  if (!isValidSalary) {
     return (
       <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-center">
-        <p className="text-amber-700 text-sm font-semibold">Salary information not set</p>
+        <p className="text-amber-700 text-sm font-semibold">
+          {payType === 'monthly' ? 'Monthly salary' : 'Hourly rate'} not set
+        </p>
         <p className="text-amber-600 text-xs mt-1">Please contact HR to set your salary details</p>
       </div>
     );
@@ -124,17 +150,24 @@ function SalaryReport({ dailySalary, overtimeHourlyRate, shifts, employeeId }) {
 
       {/* Summary Row - Always Visible */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
-        <div className="bg-slate-50 p-3 rounded-lg">
-          <p className="text-xs text-slate-500 font-medium">Daily Salary</p>
-          <p className="text-base font-bold text-slate-800">₱{salaryData.dailySalary?.toLocaleString('en-PH', { minimumFractionDigits: 2 })}</p>
-        </div>
+        {payType === 'monthly' ? (
+          <div className="bg-slate-50 p-3 rounded-lg">
+            <p className="text-xs text-slate-500 font-medium">Monthly Salary</p>
+            <p className="text-base font-bold text-slate-800">₱{displayMonthlySalary?.toLocaleString('en-PH', { minimumFractionDigits: 2 })}</p>
+          </div>
+        ) : (
+          <div className="bg-slate-50 p-3 rounded-lg">
+            <p className="text-xs text-slate-500 font-medium">Hourly Rate</p>
+            <p className="text-base font-bold text-slate-800">₱{displayHourlyRate?.toFixed(2)}</p>
+          </div>
+        )}
         <div className="bg-slate-50 p-3 rounded-lg">
           <p className="text-xs text-slate-500 font-medium">Days Worked</p>
           <p className="text-base font-bold text-slate-800">{salaryData.daysWorked}</p>
         </div>
         <div className="bg-slate-50 p-3 rounded-lg">
-          <p className="text-xs text-slate-500 font-medium">Hourly Rate</p>
-          <p className="text-base font-bold text-slate-800">₱{salaryData.hourlyRate?.toFixed(2)}</p>
+          <p className="text-xs text-slate-500 font-medium">{payType === 'monthly' ? 'Daily Rate' : 'Hourly Rate'}</p>
+          <p className="text-base font-bold text-slate-800">₱{(payType === 'monthly' ? displayDailyRate : displayHourlyRate)?.toFixed(2)}</p>
         </div>
         <div className="bg-slate-50 p-3 rounded-lg">
           <p className="text-xs text-slate-500 font-medium">OT Hours</p>
@@ -157,7 +190,7 @@ function SalaryReport({ dailySalary, overtimeHourlyRate, shifts, employeeId }) {
                       <span className="text-xs bg-red-200 text-red-800 px-2 py-0.5 rounded font-medium">2x Pay</span>
                     </div>
                     <div className="flex items-center justify-between text-xs text-red-700 mb-1">
-                      <span>{breakdown.regular.daysWorked} day(s) × ₱{salaryData.dailySalary?.toLocaleString('en-PH', { minimumFractionDigits: 2 })}</span>
+                      <span>{breakdown.regular.daysWorked} day(s) × ₱{displayDailyRate?.toLocaleString('en-PH', { minimumFractionDigits: 2 })}</span>
                       <span>Base: ₱{(breakdown.regular.basePay || 0).toLocaleString('en-PH', { minimumFractionDigits: 2 })}</span>
                     </div>
                     <div className="flex items-center justify-between text-xs text-red-700 mb-2">
@@ -177,7 +210,7 @@ function SalaryReport({ dailySalary, overtimeHourlyRate, shifts, employeeId }) {
                       <span className="text-xs bg-orange-200 text-orange-800 px-2 py-0.5 rounded font-medium">1.3x Pay</span>
                     </div>
                     <div className="flex items-center justify-between text-xs text-orange-700 mb-1">
-                      <span>{breakdown.specialNonWorking.daysWorked} day(s) × ₱{salaryData.dailySalary?.toLocaleString('en-PH', { minimumFractionDigits: 2 })}</span>
+                      <span>{breakdown.specialNonWorking.daysWorked} day(s) × ₱{displayDailyRate?.toLocaleString('en-PH', { minimumFractionDigits: 2 })}</span>
                       <span>Base: ₱{(breakdown.specialNonWorking.basePay || 0).toLocaleString('en-PH', { minimumFractionDigits: 2 })}</span>
                     </div>
                     <div className="flex items-center justify-between text-xs text-orange-700 mb-2">
@@ -197,7 +230,7 @@ function SalaryReport({ dailySalary, overtimeHourlyRate, shifts, employeeId }) {
                       <span className="text-xs bg-blue-200 text-blue-800 px-2 py-0.5 rounded font-medium">Normal Pay</span>
                     </div>
                     <div className="flex items-center justify-between text-xs text-blue-700 mb-1">
-                      <span>{breakdown.specialWorking.daysWorked} day(s) × ₱{salaryData.dailySalary?.toLocaleString('en-PH', { minimumFractionDigits: 2 })}</span>
+                      <span>{breakdown.specialWorking.daysWorked} day(s) × ₱{displayDailyRate?.toLocaleString('en-PH', { minimumFractionDigits: 2 })}</span>
                       <span>Total: ₱{(breakdown.specialWorking.totalPay || 0).toLocaleString('en-PH', { minimumFractionDigits: 2 })}</span>
                     </div>
                     <div className="flex items-center justify-between pt-2 border-t border-blue-200">

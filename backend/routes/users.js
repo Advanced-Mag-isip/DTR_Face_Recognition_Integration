@@ -20,7 +20,12 @@ router.get('/', protect, admin, async (req, res) => {
             department: u.department,
             position: u.position,
             dailySalary: u.dailySalary,
+            hourlyRate: u.hourlyRate,
+            monthlySalary: u.monthlySalary,
             overtimeHourlyRate: u.overtimeHourlyRate,
+            paymentType: u.paymentType,
+            paymentMethod: u.paymentMethod,
+            paymentDetails: u.paymentDetails,
             isActive: u.isActive,
             createdAt: u.createdAt,
             updatedAt: u.updatedAt
@@ -32,7 +37,7 @@ router.get('/', protect, admin, async (req, res) => {
 
 // Create new user (admin only)
 router.post('/', protect, admin, async (req, res) => {
-    const { employeeId, password, firstName, lastName, role, department, isActive, position, dailySalary, overtimeHourlyRate } = req.body;
+    const { employeeId, password, firstName, lastName, role, department, isActive, position, dailySalary, hourlyRate, monthlySalary, overtimeHourlyRate, paymentType, paymentMethod, paymentDetails } = req.body;
 
     try {
         // Auto-generate employee ID based on role if not provided
@@ -73,7 +78,12 @@ router.post('/', protect, admin, async (req, res) => {
             isActive: isActive !== undefined ? isActive : true,
             position: position || null,
             dailySalary: dailySalary || 0,
-            overtimeHourlyRate: overtimeHourlyRate || 0
+            hourlyRate: hourlyRate || 0,
+            monthlySalary: monthlySalary || 0,
+            overtimeHourlyRate: overtimeHourlyRate || 0,
+            paymentType: paymentType || 'hourly',
+            paymentMethod: paymentMethod || 'gcash',
+            paymentDetails: paymentDetails || null
         });
 
         res.status(201).json({
@@ -87,7 +97,12 @@ router.post('/', protect, admin, async (req, res) => {
                 department: user.department,
                 position: user.position,
                 dailySalary: user.dailySalary,
+                hourlyRate: user.hourlyRate,
+                monthlySalary: user.monthlySalary,
                 overtimeHourlyRate: user.overtimeHourlyRate,
+                paymentType: user.paymentType,
+                paymentMethod: user.paymentMethod,
+                paymentDetails: user.paymentDetails,
                 isActive: user.isActive
             }
         });
@@ -98,7 +113,7 @@ router.post('/', protect, admin, async (req, res) => {
 
 // Update user (admin only)
 router.put('/:id', protect, admin, async (req, res) => {
-    const { employeeId, password, firstName, lastName, role, department, isActive, position, dailySalary, overtimeHourlyRate } = req.body;
+    const { employeeId, password, firstName, lastName, role, department, isActive, position, dailySalary, hourlyRate, monthlySalary, overtimeHourlyRate, paymentType, paymentMethod, paymentDetails } = req.body;
 
     try {
         const user = await User.findByPk(req.params.id);
@@ -123,7 +138,12 @@ router.put('/:id', protect, admin, async (req, res) => {
         if (isActive !== undefined) user.isActive = isActive;
         if (position !== undefined) user.position = position;
         if (dailySalary !== undefined) user.dailySalary = dailySalary;
+        if (hourlyRate !== undefined) user.hourlyRate = hourlyRate;
+        if (monthlySalary !== undefined) user.monthlySalary = monthlySalary;
         if (overtimeHourlyRate !== undefined) user.overtimeHourlyRate = overtimeHourlyRate;
+        if (paymentType !== undefined) user.paymentType = paymentType;
+        if (paymentMethod !== undefined) user.paymentMethod = paymentMethod;
+        if (paymentDetails !== undefined) user.paymentDetails = paymentDetails;
 
         await user.save();
 
@@ -138,7 +158,12 @@ router.put('/:id', protect, admin, async (req, res) => {
                 department: user.department,
                 position: user.position,
                 dailySalary: user.dailySalary,
+                hourlyRate: user.hourlyRate,
+                monthlySalary: user.monthlySalary,
                 overtimeHourlyRate: user.overtimeHourlyRate,
+                paymentType: user.paymentType,
+                paymentMethod: user.paymentMethod,
+                paymentDetails: user.paymentDetails,
                 isActive: user.isActive
             }
         });

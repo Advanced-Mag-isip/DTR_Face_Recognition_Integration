@@ -56,11 +56,35 @@ const User = sequelize.define('User', {
     allowNull: true,
     defaultValue: 0.0
   },
+  hourlyRate: {
+    type: DataTypes.DECIMAL(10, 2),
+    allowNull: true,
+    defaultValue: 0.0
+  },
+  monthlySalary: {
+    type: DataTypes.DECIMAL(12, 2),
+    allowNull: true,
+    defaultValue: 0.0
+  },
   overtimeHourlyRate: {
     type: DataTypes.DECIMAL(10, 2),
     allowNull: true,
     defaultValue: 0.0
   },
+  paymentType: {
+    type: DataTypes.ENUM('monthly', 'hourly'),
+    defaultValue: 'hourly',
+    allowNull: true
+  },
+  paymentMethod: {
+    type: DataTypes.ENUM('cash', 'gcash', 'bank_transfer'),
+    defaultValue: 'gcash',
+    allowNull: true,
+  },
+  paymentDetails: {
+    type: DataTypes.STRING,
+    allowNull: true,
+  }
 }, {
   timestamps: true,
   hooks: {
