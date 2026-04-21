@@ -136,6 +136,7 @@ function ShiftTable({ data, onEdit, onDelete, dailySalary, overtimeHourlyRate, p
             <th className="px-4 py-4 text-sm font-semibold text-slate-700">Afternoon</th>
             <th className="px-4 py-4 text-sm font-semibold text-slate-700">Overtime</th>
             <th className="px-4 py-4 text-sm font-semibold text-slate-700">Total Hours</th>
+            <th className="px-4 py-4 text-sm font-semibold text-slate-700">Status</th>
             <th className="px-4 py-4 text-sm font-semibold text-slate-700">Notes</th>
             <th className="px-4 py-4 text-sm font-semibold text-slate-700">Shift Salary</th>
             <th className="px-4 py-4 text-sm font-semibold text-slate-700 rounded-tr-xl">Actions</th>
@@ -171,6 +172,20 @@ function ShiftTable({ data, onEdit, onDelete, dailySalary, overtimeHourlyRate, p
                   )}
                 </td>
                 <td className="px-4 py-4 text-sm font-bold text-slate-800">{shift.totalHours} hrs</td>
+                <td className="px-4 py-4">
+                  {shift.isPaid ? (
+                    <span className="inline-flex items-center gap-1 px-2 py-1 bg-green-100 text-green-700 text-xs font-medium rounded-lg">
+                      <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                      </svg>
+                      Paid
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1 px-2 py-1 bg-amber-100 text-amber-700 text-xs font-medium rounded-lg">
+                      Unpaid
+                    </span>
+                  )}
+                </td>
                 <td className="px-4 py-4">
                   {shift.notes ? (
                     <button

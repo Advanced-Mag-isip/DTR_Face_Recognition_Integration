@@ -19,26 +19,53 @@ Implement the "Salary Loop" feature for the DTR system and transition the workfl
 - [x] **Step 3**: Frontend Update - Updated `AddEmployeeModal.jsx` with payment fields (paymentType, paymentMethod, paymentDetails).
 - [x] **Step 4**: Proper Fix - Added `hourlyRate` and `monthlySalary` fields with Sequelize migration.
 - [x] **Step 5**: Salary UI Update - Updated `SalaryReport.jsx` and `ShiftTable.jsx` to support hourly/monthly payment types.
+- [x] **Step 6**: PaySalaryModal - Admin modal to mark shifts as paid.
+- [x] **Step 7**: Employee Table Enhancements - Added Position, Payment Type, Salary Rate, Remaining Salary columns, and Pay button in Actions.
+- [x] **Step 8**: Payroll Report - Full-page report with 1st Half, 2nd Half, and Monthly tabs, department filter, notes editing, CSV export.
+- [x] **Step 9**: Fixed isPaid status - Payroll Report now correctly shows PAID/UNPAID based on shift.isPaid field.
+- [x] Database field `users.payrollNotes` - JSON field for storing payroll notes per period.
 
 ## 🚧 In Progress
-- **Step 6**: PaySalaryModal - Create admin modal to mark shifts as paid.
+- None - All core salary loop features are implemented.
 
-## 📋 Pending Steps
-1. **RemainingSalary**: Create component for employee unpaid balance view.
-2. **Build Deployment**: Run `npm run build` and deploy to VPS.
-3. **Git Integration**: Establish `git pull` as deployment method on VPS.
+## 📋 Pending Steps (Future Implementation)
+1. **Fixed Monthly Salary Logic** - For employees who don't add shifts but receive fixed monthly salary.
+2. **SalaryReport Enhancements** - Add paid status, payment method, remaining balance display.
+3. **Build Deployment**: Run `npm run build` and deploy to VPS.
+4. **Git Integration**: Establish `git pull` as deployment method on VPS.
 
 ## 💡 Key Logic Implemented
-- **Employee Props**: `position`, `paymentType` (monthly/hourly), `paymentMethod`, `paymentDetails`, `hourlyRate`, `monthlySalary`, `dailySalary`.
-- **Salary Calculation**:
-  - Hourly workers: Uses `hourlyRate` or derives from `dailySalary / 8`
-  - Monthly workers: Derives hourly rate from `monthlySalary / 26 / 8`
-- **Existing Fields**: `overtimeHourlyRate`, `isPaid`, `paidAt` on Shift.
+### Employee Props
+| Field | Description |
+|-------|-------------|
+| `position` | Employee position/title |
+| `paymentType` | `monthly` or `hourly` |
+| `paymentMethod` | cash, gcash, bank_transfer |
+| `paymentDetails` | GCash number or bank account |
+| `hourlyRate` | Hourly rate (for hourly workers) |
+| `monthlySalary` | Monthly salary (for monthly workers) |
+| `dailySalary` | Daily rate (legacy) |
+| `overtimeHourlyRate` | Overtime rate |
+| `payrollNotes` | JSON - stores notes like "PAID" or custom notes per period |
 
-## 💡 Key Logic (Pending)
-- **Pay Salary Modal**: Checkbox for unpaid days, Payment Summary, Confirm button (marks shifts as `isPaid: true`).
-- **Remaining Salary**: logic to sum unpaid shifts; hide for monthly users until 1 day before the last Friday.
-- **Payroll Report**: 1st Cut-off (2nd Friday), 2nd Cut-off (Last Friday).
+### Salary Calculation
+- Hourly workers: Uses `hourlyRate` or derives from `dailySalary / 8`
+- Monthly workers: Derives hourly rate from `monthlySalary / 26 / 8`
+
+### Shift Fields
+| Field | Description |
+|-------|-------------|
+| `isPaid` | Boolean - whether shift has been paid |
+| `paidAt` | Timestamp - when shift was paid |
+
+### Pay Period Options
+- **1st Cut-off**: Days 1-15 (Paid on 2nd Friday of month)
+- **2nd Cut-off**: Days 16-End (Paid on last Friday of month)
+- **Monthly**: Full month (Paid on last Friday of month)
+
+### Payroll Report Status Logic
+- **Hourly/Daily**: Checks `shift.isPaid` for each shift. All paid = "PAID", any unpaid = "UNPAID"
+- **Monthly**: Checks if "PAID" note exists in `payrollNotes` for that period
 
 ## 🛠 Server Access Notes
 - **User**: root
@@ -46,13 +73,75 @@ Implement the "Salary Loop" feature for the DTR system and transition the workfl
 - **PM2 App**: `server`
 - **DB Backup Path**: `/home/advancedthinkers-dtr/backups/`
 
+## 📝 Future Implementation: Fixed Monthly Salary Logic
+
+### Problem Statement
+Some employees receive a **fixed monthly salary** regardless of whether they add shifts or come to the office. They don't need to log shifts - their salary is simply paid at the end of the month.
+
+Currently, if a monthly employee adds no shifts, their Payroll shows ₱0 (incorrect).
+
+### Proposed Solution
+For `paymentType = 'monthly'` employees in Payroll Report:
+
+```
+IF employee has shifts in period:
+    amount = calculated from shifts
+ELSE:
+    amount = monthlySalary (full month)
+```
+
+### Implementation Steps
+1. **Backend**: Modify Payroll Report calculation for monthly employees
+2. **Frontend**: Automatic detection - no changes needed
+3. **Database**: No new fields needed (uses existing `monthlySalary`)
+
+### Files to Modify
+- `backend/routes/salary.js` - Update `/unpaid` and `/pay` routes for monthly logic
+- `src/components/PayrollReport.jsx` - Update amount calculation for monthly employees
+
+## 📝 Future Implementation: SalaryReport Enhancements
+
+### Problem Statement
+SalaryReport component currently doesn't show:
+- Payment status (PAID/UNPAID)
+- Payment method details (GCash number, bank account)
+- Remaining unpaid balance
+
+### Proposed Solution
+Add the following to SalaryReport component:
+1. **Paid Status** - Show if all shifts paid or highlight unpaid ones
+2. **Payment Method** - Display paymentMethod + paymentDetails
+3. **Remaining Balance** - Calculate and show unpaid amount
+
+### Implementation Steps
+1. Pass `paymentMethod`, `paymentDetails`, and shift data to SalaryReport
+2. Calculate unpaid shifts vs paid shifts
+3. Display payment info (if available)
+4. Update UI to show balances
+
+### Files to Modify
+- `src/components/SalaryReport.jsx` - Add new props and display logic
+
+---
+
 ## 🗄 Database Migration Notes
-Run in TablePlus on local and production:
+
+### Completed Migrations
 ```sql
+-- Add salary fields
 ALTER TABLE users 
 ADD COLUMN hourlyRate DECIMAL(10, 2) DEFAULT 0.00 AFTER dailySalary,
 ADD COLUMN monthlySalary DECIMAL(12, 2) DEFAULT 0.00 AFTER hourlyRate;
+
+-- Add isPaid and paidAt to shifts (already done in Step 1)
+ALTER TABLE shifts 
+ADD COLUMN isPaid BOOLEAN DEFAULT FALSE,
+ADD COLUMN paidAt DATETIME;
+
+-- Add payroll notes for storing notes per period
+ALTER TABLE users ADD COLUMN payrollNotes TEXT;
 ```
 
 ---
+
 *This file serves as a context bridge. Do not delete until the "Salary Loop" feature is fully deployed.*

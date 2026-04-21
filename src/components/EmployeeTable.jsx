@@ -1,14 +1,73 @@
 import { RiCalendarEventLine } from 'react-icons/ri';
 import { RiEditLine } from 'react-icons/ri';
 import { RiDeleteBinLine } from 'react-icons/ri';
+import { RiMoneyDollarCircleLine } from 'react-icons/ri';
 
 function EmployeeTable({
   employees,
   loading,
   onViewHistory,
   onEdit,
-  onDelete
+  onDelete,
+  onPaySalary,
+  shifts = [],
+  currentMonth
 }) {
+  const calculateRemainingSalary = (emp) => {
+    if (!emp || !shifts || shifts.length === 0) return 0;
+    
+    const empShifts = shifts.filter(s => s.employeeId === emp.id);
+    if (empShifts.length === 0) return 0;
+    
+    const paymentType = emp.paymentType || 'hourly';
+    const hourlyRate = parseFloat(emp.hourlyRate) || 0;
+    const monthlySalary = parseFloat(emp.monthlySalary) || 0;
+    const dailySalary = parseFloat(emp.dailySalary) || 0;
+    
+    const unpaidShifts = empShifts.filter(s => !s.isPaid);
+    if (unpaidShifts.length === 0) return 0;
+    
+    let total = 0;
+    if (paymentType === 'monthly' && monthlySalary > 0) {
+      const dailyRate = monthlySalary / 26;
+      total = unpaidShifts.length * dailyRate;
+    } else if (hourlyRate > 0) {
+      unpaidShifts.forEach(shift => {
+        const regHours = (shift.morningHours || 0) + (shift.afternoonHours || 0);
+        const otHours = shift.overtimeHours || 0;
+        const otRate = emp.overtimeHourlyRate ? parseFloat(emp.overtimeHourlyRate) : hourlyRate;
+        total += (regHours * hourlyRate) + (otHours * otRate);
+      });
+    } else if (dailySalary > 0) {
+      total = unpaidShifts.length * dailySalary;
+    }
+    
+    return total;
+  };
+
+  const shouldShowRemainingSalary = (emp) => {
+    if (!emp) return false;
+    if (emp.paymentType === 'hourly') return true;
+    
+    const paymentType = emp.paymentType || 'hourly';
+    if (paymentType !== 'monthly') return true;
+    
+    const now = new Date();
+    const lastFriday = new Date(now.getFullYear(), now.getMonth(), 0);
+    while (lastFriday.getDay() !== 5) {
+      lastFriday.setDate(lastFriday.getDate() - 1);
+    }
+    
+    const oneDayBefore = new Date(lastFriday);
+    oneDayBefore.setDate(oneDayBefore.getDate() - 1);
+    
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    oneDayBefore.setHours(0, 0, 0, 0);
+    
+    return today >= oneDayBefore;
+  };
+
   if (loading) {
     return (
       <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
@@ -35,77 +94,117 @@ function EmployeeTable({
         <table className="w-full">
           <thead>
             <tr className="bg-primary text-left">
-              <th className="px-6 py-4 text-sm font-semibold text-white rounded-tl-xl">Employee ID</th>
-              <th className="px-6 py-4 text-sm font-semibold text-white">Name</th>
-              <th className="px-6 py-4 text-sm font-semibold text-white">Department</th>
-              <th className="px-6 py-4 text-sm font-semibold text-white">Role</th>
-              <th className="px-6 py-4 text-sm font-semibold text-white">Status</th>
-              <th className="px-6 py-4 text-sm font-semibold text-white rounded-tr-xl">Actions</th>
+              <th className="px-4 py-4 text-sm font-semibold text-white rounded-tl-xl">Employee ID</th>
+              <th className="px-4 py-4 text-sm font-semibold text-white">Name</th>
+              <th className="px-4 py-4 text-sm font-semibold text-white">Position</th>
+              <th className="px-4 py-4 text-sm font-semibold text-white">Payment Type</th>
+              <th className="px-4 py-4 text-sm font-semibold text-white">Salary Rate</th>
+              <th className="px-4 py-4 text-sm font-semibold text-white">Remaining</th>
+              <th className="px-4 py-4 text-sm font-semibold text-white">Status</th>
+              <th className="px-4 py-4 text-sm font-semibold text-white rounded-tr-xl">Actions</th>
             </tr>
           </thead>
           <tbody>
-            {employees.map((emp) => (
-              <tr key={emp.id} className="border-b border-slate-100 hover:bg-slate-50 transition-colors">
-                <td className="px-6 py-4">
-                  <span className="text-sm font-semibold text-slate-800">{emp.employeeId}</span>
-                </td>
-                <td className="px-6 py-4">
-                  <div className="flex items-center gap-3">
-                    <div className="w-9 h-9 bg-primary/10 rounded-full flex items-center justify-center text-primary text-sm font-bold">
-                      {emp.firstName[0]}{emp.lastName[0]}
+            {employees.map((emp) => {
+              const paymentType = emp.paymentType || 'hourly';
+              const hourlyRate = parseFloat(emp.hourlyRate) || 0;
+              const monthlySalary = parseFloat(emp.monthlySalary) || 0;
+              const dailySalary = parseFloat(emp.dailySalary) || 0;
+              
+              let salaryDisplay = '';
+              if (paymentType === 'monthly' && monthlySalary > 0) {
+                salaryDisplay = `₱${monthlySalary.toLocaleString()}/mo`;
+              } else if (hourlyRate > 0) {
+                salaryDisplay = `₱${hourlyRate.toFixed(2)}/hr`;
+              } else if (dailySalary > 0) {
+                salaryDisplay = `₱${dailySalary.toFixed(2)}/day`;
+              }
+              
+              const remaining = calculateRemainingSalary(emp);
+              const showRemaining = shouldShowRemainingSalary(emp);
+              
+              return (
+                <tr key={emp.id} className="border-b border-slate-100 hover:bg-slate-50 transition-colors">
+                  <td className="px-4 py-4">
+                    <span className="text-sm font-semibold text-slate-800">{emp.employeeId}</span>
+                  </td>
+                  <td className="px-4 py-4">
+                    <div className="flex items-center gap-3">
+                      <div className="w-9 h-9 bg-primary/10 rounded-full flex items-center justify-center text-primary text-sm font-bold">
+                        {emp.firstName?.[0]}{emp.lastName?.[0]}
+                      </div>
+                      <span className="text-sm text-slate-700 font-medium">{emp.firstName} {emp.lastName}</span>
                     </div>
-                    <span className="text-sm text-slate-700 font-medium">{emp.firstName} {emp.lastName}</span>
-                  </div>
-                </td>
-                <td className="px-6 py-4">
-                  <span className="text-sm text-slate-600">{emp.department}</span>
-                </td>
-                <td className="px-6 py-4">
-                  <span className={`text-xs font-semibold px-3 py-1.5 rounded-full ${
-                    emp.role === 'admin'
-                      ? 'bg-slate-100 text-slate-700'
-                      : 'bg-slate-100 text-slate-700'
-                  }`}>
-                    {emp.role}
-                  </span>
-                </td>
-                <td className="px-6 py-4">
-                  <span className={`text-xs font-semibold px-3 py-1.5 rounded-full ${
-                    emp.isActive
-                      ? 'bg-success-bg text-success'
-                      : 'bg-danger-bg text-danger'
-                  }`}>
-                    {emp.isActive ? 'Active' : 'Inactive'}
-                  </span>
-                </td>
-                <td className="px-6 py-4">
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => onViewHistory(emp)}
-                      className="flex items-center gap-1 px-3 py-2 text-sm text-primary hover:bg-primary/10 rounded-lg transition-colors font-medium"
-                      title="View Shift History"
-                    >
-                      <RiCalendarEventLine className="w-4 h-4" />
-                      History
-                    </button>
-                    <button
-                      onClick={() => onEdit(emp)}
-                      className="p-2 text-primary hover:bg-primary/10 rounded-lg transition-colors"
-                      title="Edit"
-                    >
-                      <RiEditLine className="w-4 h-4" />
-                    </button>
-                    <button
-                      onClick={() => onDelete(emp)}
-                      className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors"
-                      title="Delete"
-                    >
-                      <RiDeleteBinLine className="w-4 h-4" />
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            ))}
+                  </td>
+                  <td className="px-4 py-4">
+                    <span className="text-sm text-slate-600">{emp.position || '-'}</span>
+                  </td>
+                  <td className="px-4 py-4">
+                    <span className={`text-xs font-semibold px-3 py-1.5 rounded-full ${
+                      paymentType === 'monthly'
+                        ? 'bg-blue-100 text-blue-700'
+                        : 'bg-green-100 text-green-700'
+                    }`}>
+                      {paymentType === 'monthly' ? 'Monthly' : 'Hourly'}
+                    </span>
+                  </td>
+                  <td className="px-4 py-4">
+                    <span className="text-sm text-slate-600 font-medium">{salaryDisplay || '-'}</span>
+                  </td>
+                  <td className="px-4 py-4">
+                    {showRemaining && remaining > 0 ? (
+                      <span className="text-sm font-semibold text-amber-600">₱{remaining.toFixed(2)}</span>
+                    ) : showRemaining ? (
+                      <span className="text-sm text-green-600">Paid</span>
+                    ) : (
+                      <span className="text-xs text-slate-400">--</span>
+                    )}
+                  </td>
+                  <td className="px-4 py-4">
+                    <span className={`text-xs font-semibold px-3 py-1.5 rounded-full ${
+                      emp.isActive
+                        ? 'bg-success-bg text-success'
+                        : 'bg-danger-bg text-danger'
+                    }`}>
+                      {emp.isActive ? 'Active' : 'Inactive'}
+                    </span>
+                  </td>
+                  <td className="px-4 py-4">
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={() => onPaySalary && onPaySalary(emp)}
+                        className="flex items-center gap-1 px-2 py-1.5 text-sm text-green-600 hover:bg-green-50 rounded-lg transition-colors font-medium"
+                        title="Pay Salary"
+                      >
+                        <RiMoneyDollarCircleLine className="w-4 h-4" />
+                        Pay
+                      </button>
+                      <button
+                        onClick={() => onViewHistory(emp)}
+                        className="flex items-center gap-1 px-2 py-1.5 text-sm text-primary hover:bg-primary/10 rounded-lg transition-colors font-medium"
+                        title="View Shift History"
+                      >
+                        <RiCalendarEventLine className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={() => onEdit(emp)}
+                        className="p-1.5 text-primary hover:bg-primary/10 rounded-lg transition-colors"
+                        title="Edit"
+                      >
+                        <RiEditLine className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={() => onDelete(emp)}
+                        className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                        title="Delete"
+                      >
+                        <RiDeleteBinLine className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>

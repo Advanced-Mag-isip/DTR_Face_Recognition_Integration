@@ -19,3 +19,8 @@ export const deleteUser = async (id) => {
     const { data } = await api.delete(`/users/${id}`);
     return data;
 };
+
+export const savePayrollNote = async (id, period, note) => {
+    const { data } = await api.put(`/users/${id}/payroll-note`, { period, note });
+    return data;
+};

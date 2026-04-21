@@ -7,6 +7,7 @@ import { RiUserAddLine } from 'react-icons/ri';
 import { RiCloseLine } from 'react-icons/ri';
 import { RiCalendarLine } from 'react-icons/ri';
 import { RiBuildingLine } from 'react-icons/ri';
+import { RiFileTextLine } from 'react-icons/ri';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { getUsers, createUser, updateUser, deleteUser } from '../utils/usersApi';
@@ -27,10 +28,12 @@ import AddEmployeeModal from './AddEmployeeModal';
 import ViewTabs from './ViewTabs';
 import HolidayManagement from './HolidayManagement';
 import DepartmentManagement from './DepartmentManagement';
+import PaySalaryModal from './PaySalaryModal';
+import PayrollReport from './PayrollReport';
 
 const TABS = [
   { value: 'employees', label: 'Employee Management' },
-  { value: 'shiftHistory', label: 'Shift History' }
+  { value: 'payroll', label: 'Payroll Report' }
 ];
 
 function AdminDashboard() {
@@ -43,6 +46,8 @@ function AdminDashboard() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showHolidayManagement, setShowHolidayManagement] = useState(false);
   const [showDepartmentManagement, setShowDepartmentManagement] = useState(false);
+  const [showPaySalaryModal, setShowPaySalaryModal] = useState(false);
+  const [showPayrollReport, setShowPayrollReport] = useState(false);
 
   // Data states
   const [employees, setEmployees] = useState([]);
@@ -350,6 +355,12 @@ function AdminDashboard() {
               <EmployeeTable
                 employees={filteredEmployees}
                 loading={loadingEmployees}
+                shifts={shifts}
+                currentMonth={selectedMonth}
+                onPaySalary={(emp) => {
+                  setSelectedEmployee(emp);
+                  setShowPaySalaryModal(true);
+                }}
                 onViewHistory={(emp) => {
                   setSelectedEmployee(emp);
                   setShowEmployeeHistoryModal(true);
@@ -366,69 +377,13 @@ function AdminDashboard() {
             </>
           )}
 
-          {currentView === 'shiftHistory' && (
+          {currentView === 'payroll' && (
             <div className="w-full">
-              <div className="mb-6">
-                <h2 className="text-2xl font-bold text-slate-800">My Shift History</h2>
-                <p className="text-sm text-slate-500">View and manage your own attendance records</p>
-              </div>
-
-              <StatsCards data={getFilteredShifts()} />
-
-              {(user?.dailySalary && user.dailySalary > 0) && (
-                <div className="mt-8">
-                  <SalaryReport
-                    dailySalary={user.dailySalary}
-                    overtimeHourlyRate={user.overtimeHourlyRate}
-                    shifts={getFilteredShifts()}
-                    paymentType={user.paymentType}
-                    hourlyRate={user.hourlyRate}
-                    monthlySalary={user.monthlySalary}
-                  />
-                </div>
-              )}
-
-              <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 mt-8">
-                <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
-                  <div className="flex items-center gap-3">
-                    <SortDropdown sortOrder={sortOrder} setSortOrder={setSortOrder} />
-                    <MonthPicker selectedMonth={selectedMonth} setSelectedMonth={setSelectedMonth} />
-                  </div>
-                  <button
-                    onClick={() => {
-                      setEditingShift(null);
-                      setShowAddShiftModal(true);
-                    }}
-                    className="flex items-center gap-2 bg-primary text-white px-4 py-2 rounded-xl text-sm font-semibold hover:bg-primary-light transition-colors"
-                  >
-                    <RiAddLine className="w-5 h-5" />
-                    Add Shift
-                  </button>
-                </div>
-
-                {loadingShifts ? (
-                  <div className="text-center py-12 text-slate-400 text-sm">
-                    Loading shifts...
-                  </div>
-                ) : (
-                  <ShiftTable
-                    data={getFilteredShifts()}
-                    onEdit={(shift) => {
-                      setEditingShift(shift);
-                      setShowAddShiftModal(true);
-                    }}
-                    onDelete={(shift) => {
-                      setShiftToDelete(shift);
-                      setShowDeleteShiftConfirm(true);
-                    }}
-                    dailySalary={user?.dailySalary}
-                    overtimeHourlyRate={user?.overtimeHourlyRate}
-                    paymentType={user?.paymentType}
-                    hourlyRate={user?.hourlyRate}
-                    monthlySalary={user?.monthlySalary}
-                  />
-                )}
-              </div>
+              <PayrollReport
+                employees={employees}
+                shifts={shifts}
+                departments={departments}
+              />
             </div>
           )}
         </div>
@@ -638,6 +593,17 @@ function AdminDashboard() {
       <HolidayManagement
         isOpen={showHolidayManagement}
         onClose={() => setShowHolidayManagement(false)}
+      />
+
+      {/* Pay Salary Modal */}
+      <PaySalaryModal
+        isOpen={showPaySalaryModal}
+        onClose={() => {
+          setShowPaySalaryModal(false);
+          setSelectedEmployee(null);
+        }}
+        employees={employees}
+        lockedEmployee={selectedEmployee}
       />
     </div>
   );

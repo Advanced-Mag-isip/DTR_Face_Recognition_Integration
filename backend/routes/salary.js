@@ -206,4 +206,225 @@ router.get('/current-month', protect, async (req, res) => {
   }
 });
 
+/**
+ * POST /api/salary/pay
+ * Mark shifts as paid (batch)
+ * Body: { employeeId, shiftIds[], payPeriod: 'first' | 'second' }
+ */
+router.post('/pay', protect, async (req, res) => {
+  if (req.user.role !== 'admin') {
+    return res.status(403).json({ message: 'Admin access required' });
+  }
+
+  const { employeeId, shiftIds, payPeriod, startDate, endDate } = req.body;
+
+  try {
+    const targetId = employeeId;
+    const user = await User.findByPk(targetId, {
+      attributes: ['id', 'firstName', 'lastName', 'employeeId', 'position', 'paymentType', 'hourlyRate', 'monthlySalary', 'dailySalary', 'overtimeHourlyRate']
+    });
+
+    if (!user) {
+      return res.status(404).json({ message: 'Employee not found' });
+    }
+
+    const hourlyRate = parseFloat(user.hourlyRate) || 0;
+    const monthlySalary = parseFloat(user.monthlySalary) || 0;
+    const dailySalary = parseFloat(user.dailySalary) || 0;
+    const paymentType = user.paymentType || 'hourly';
+
+    let whereClause = { employeeId: targetId, isPaid: false };
+
+    if (shiftIds && shiftIds.length > 0) {
+      whereClause.id = { [Op.in]: shiftIds };
+    } else if (startDate && endDate) {
+      whereClause.date = { [Op.between]: [startDate, endDate] };
+    } else if (payPeriod) {
+      const now = new Date();
+      const year = now.getFullYear();
+      const month = now.getMonth();
+      const monthStart = new Date(year, month, 1);
+      const monthEnd = new Date(year, month + 1, 0);
+
+      if (payPeriod === 'first') {
+        whereClause.date = {
+          [Op.between]: [
+            monthStart.toISOString().split('T')[0],
+            new Date(year, month, 15).toISOString().split('T')[0]
+          ]
+        };
+      } else if (payPeriod === 'monthly') {
+        whereClause.date = {
+          [Op.between]: [
+            monthStart.toISOString().split('T')[0],
+            monthEnd.toISOString().split('T')[0]
+          ]
+        };
+      } else {
+        whereClause.date = {
+          [Op.between]: [
+            new Date(year, month, 16).toISOString().split('T')[0],
+            monthEnd.toISOString().split('T')[0]
+          ]
+        };
+      }
+    }
+
+    const shifts = await Shift.findAll({ where: whereClause });
+
+    if (shifts.length === 0) {
+      return res.status(400).json({ message: 'No unpaid shifts found for the selected period' });
+    }
+
+    const paidAt = new Date().toISOString();
+
+    await Shift.update(
+      { isPaid: true, paidAt },
+      { where: whereClause }
+    );
+
+    const totalShifts = shifts.length;
+    let totalAmount = 0;
+
+    if (paymentType === 'monthly' && monthlySalary > 0) {
+      const monthlyRate = monthlySalary / 26;
+      totalAmount = shifts.length * monthlyRate;
+    } else if (hourlyRate > 0) {
+      shifts.forEach(shift => {
+        const regularHours = (shift.morningHours || 0) + (shift.afternoonHours || 0);
+        const overtimeHours = shift.overtimeHours || 0;
+        const otRate = user.overtimeHourlyRate ? parseFloat(user.overtimeHourlyRate) : hourlyRate;
+        totalAmount += (regularHours * hourlyRate) + (overtimeHours * otRate);
+      });
+    } else if (dailySalary > 0) {
+      totalAmount = shifts.length * dailySalary;
+    }
+
+    res.json({
+      message: `Successfully marked ${totalShifts} shift(s) as paid`,
+      paidCount: totalShifts,
+      totalAmount: parseFloat(totalAmount.toFixed(2)),
+      payPeriod,
+      paidAt,
+      employee: {
+        id: user.id,
+        name: `${user.firstName} ${user.lastName}`,
+        employeeId: user.employeeId,
+        paymentType
+      }
+    });
+  } catch (err) {
+    console.error('Pay salary error:', err);
+    res.status(500).json({ message: 'Server error', error: err.message });
+  }
+});
+
+/**
+ * GET /api/salary/unpaid
+ * Get unpaid shifts for an employee
+ * Query: employeeId, payPeriod (first/second), month (YYYY-MM)
+ */
+router.get('/unpaid', protect, async (req, res) => {
+  if (req.user.role !== 'admin') {
+    return res.status(403).json({ message: 'Admin access required' });
+  }
+
+  const { employeeId, payPeriod, month } = req.query;
+
+  try {
+    const targetId = employeeId;
+    const user = await User.findByPk(targetId, {
+      attributes: ['id', 'firstName', 'lastName', 'employeeId', 'position', 'paymentType', 'hourlyRate', 'monthlySalary', 'dailySalary', 'overtimeHourlyRate']
+    });
+
+    if (!user) {
+      return res.status(404).json({ message: 'Employee not found' });
+    }
+
+    let whereClause = { employeeId: targetId, isPaid: false };
+
+    if (month) {
+      const [year, monthNum] = month.split('-').map(Number);
+      const monthStart = new Date(year, monthNum - 1, 1);
+      const monthEnd = new Date(year, monthNum, 0);
+
+      if (payPeriod === 'first') {
+        whereClause.date = {
+          [Op.between]: [
+            monthStart.toISOString().split('T')[0],
+            new Date(year, monthNum - 1, 15).toISOString().split('T')[0]
+          ]
+        };
+      } else if (payPeriod === 'monthly') {
+        whereClause.date = {
+          [Op.between]: [
+            monthStart.toISOString().split('T')[0],
+            monthEnd.toISOString().split('T')[0]
+          ]
+        };
+      } else if (payPeriod === 'second') {
+        whereClause.date = {
+          [Op.between]: [
+            new Date(year, monthNum - 1, 16).toISOString().split('T')[0],
+            monthEnd.toISOString().split('T')[0]
+          ]
+        };
+      } else {
+        whereClause.date = {
+          [Op.between]: [
+            monthStart.toISOString().split('T')[0],
+            monthEnd.toISOString().split('T')[0]
+          ]
+        };
+      }
+    }
+
+    const shifts = await Shift.findAll({
+      where: whereClause,
+      order: [['date', 'DESC']]
+    });
+
+    const hourlyRate = parseFloat(user.hourlyRate) || 0;
+    const monthlySalary = parseFloat(user.monthlySalary) || 0;
+    const dailySalary = parseFloat(user.dailySalary) || 0;
+    const paymentType = user.paymentType || 'hourly';
+
+    let totalAmount = 0;
+    if (paymentType === 'monthly' && monthlySalary > 0) {
+      const monthlyRate = monthlySalary / 26;
+      totalAmount = shifts.length * monthlyRate;
+    } else if (hourlyRate > 0) {
+      shifts.forEach(shift => {
+        const regularHours = (shift.morningHours || 0) + (shift.afternoonHours || 0);
+        const overtimeHours = shift.overtimeHours || 0;
+        const otRate = user.overtimeHourlyRate ? parseFloat(user.overtimeHourlyRate) : hourlyRate;
+        totalAmount += (regularHours * hourlyRate) + (overtimeHours * otRate);
+      });
+    } else if (dailySalary > 0) {
+      totalAmount = shifts.length * dailySalary;
+    }
+
+    res.json({
+      employee: {
+        id: user.id,
+        name: `${user.firstName} ${user.lastName}`,
+        employeeId: user.employeeId,
+        position: user.position,
+        paymentType,
+        hourlyRate,
+        monthlySalary,
+        dailySalary
+      },
+      shifts,
+      unpaidCount: shifts.length,
+      totalAmount: parseFloat(totalAmount.toFixed(2)),
+      payPeriod,
+      month
+    });
+  } catch (err) {
+    console.error('Get unpaid shifts error:', err);
+    res.status(500).json({ message: 'Server error', error: err.message });
+  }
+});
+
 module.exports = router;

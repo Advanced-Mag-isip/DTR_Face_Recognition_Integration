@@ -26,6 +26,7 @@ router.get('/', protect, admin, async (req, res) => {
             paymentType: u.paymentType,
             paymentMethod: u.paymentMethod,
             paymentDetails: u.paymentDetails,
+            payrollNotes: u.payrollNotes,
             isActive: u.isActive,
             createdAt: u.createdAt,
             updatedAt: u.updatedAt
@@ -198,6 +199,38 @@ router.delete('/:id', protect, admin, async (req, res) => {
         res.json({ message: 'User deleted successfully' });
     } catch (err) {
         console.error('Delete user error:', err);
+        res.status(500).json({ message: 'Server error', error: err.message });
+    }
+});
+
+// Save payroll note for employee
+router.put('/:id/payroll-note', protect, admin, async (req, res) => {
+    const { id } = req.params;
+    const { period, note } = req.body;
+
+    try {
+        const user = await User.findByPk(id);
+        if (!user) {
+            return res.status(404).json({ message: 'User not found' });
+        }
+
+        let notes = {};
+        try {
+          if (user.payrollNotes) {
+            notes = typeof user.payrollNotes === 'string' 
+              ? JSON.parse(user.payrollNotes) 
+              : user.payrollNotes;
+          }
+        } catch (e) {
+          notes = {};
+        }
+        notes[period] = note;
+
+        await user.update({ payrollNotes: JSON.stringify(notes) });
+
+        res.json({ message: 'Payroll note saved', payrollNotes: notes });
+    } catch (err) {
+        console.error('Save payroll note error:', err);
         res.status(500).json({ message: 'Server error', error: err.message });
     }
 });

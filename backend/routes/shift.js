@@ -116,6 +116,8 @@ router.post('/', protect, async (req, res) => {
             isHoliday: shift.isHoliday,
             holidayType: shift.holidayType,
             holidayName: shift.holidayName,
+            isPaid: shift.isPaid,
+            paidAt: shift.paidAt,
         });
     } catch (err) {
         console.error('Shift creation error:', err);
@@ -159,6 +161,8 @@ router.get('/', protect, async (req, res) => {
             isHoliday: s.isHoliday,
             holidayType: s.holidayType,
             holidayName: s.holidayName,
+            isPaid: s.isPaid,
+            paidAt: s.paidAt,
             createdAt: s.createdAt,
             updatedAt: s.updatedAt
         })));
@@ -250,6 +254,8 @@ router.put('/:id', protect, async (req, res) => {
             isHoliday: shift.isHoliday,
             holidayType: shift.holidayType,
             holidayName: shift.holidayName,
+            isPaid: shift.isPaid,
+            paidAt: shift.paidAt,
         });
     } catch (err) {
         console.error('Shift update error:', err);

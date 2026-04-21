@@ -84,6 +84,11 @@ const User = sequelize.define('User', {
   paymentDetails: {
     type: DataTypes.STRING,
     allowNull: true,
+  },
+  payrollNotes: {
+    type: DataTypes.TEXT,
+    defaultValue: '{}',
+    allowNull: true,
   }
 }, {
   timestamps: true,
