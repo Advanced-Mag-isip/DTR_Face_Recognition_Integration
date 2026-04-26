@@ -176,27 +176,25 @@ router.put('/:id', protect, admin, async (req, res) => {
 // Delete user (admin only)
 router.delete('/:id', protect, admin, async (req, res) => {
     try {
-        const user = await User.findByPk(req.params.id);
+        const idToDelete = req.params.id;
+        const user = await User.findByPk(idToDelete);
 
         if (!user) {
             return res.status(404).json({ message: 'User not found' });
         }
 
-        // Compare as strings to handle type mismatch
-        if (String(user.id) === String(req.user.id)) {
+        // Check if user is trying to delete themselves
+        if (parseInt(idToDelete) === parseInt(req.user.id)) {
             return res.status(400).json({ message: 'Cannot delete your own account' });
         }
 
-        console.log(`Deleting shifts for user ${user.id}...`);
-        // Delete associated shifts first to avoid foreign key constraint
-        const deletedShiftsCount = await Shift.destroy({ where: { employeeId: user.id } });
-        console.log(`Deleted ${deletedShiftsCount} shifts for user ${user.id}`);
+        // Shifts are deleted via CASCADE, but we can do it manually for extra safety
+        // if we want to follow user's request explicitly
+        await Shift.destroy({ where: { employeeId: idToDelete } });
 
-        console.log(`Deleting user ${user.id}...`);
         await user.destroy();
-        console.log(`User ${user.id} deleted successfully`);
 
-        res.json({ message: 'User deleted successfully' });
+        res.json({ message: 'User and all associated records deleted successfully' });
     } catch (err) {
         console.error('Delete user error:', err);
         res.status(500).json({ message: 'Server error', error: err.message });

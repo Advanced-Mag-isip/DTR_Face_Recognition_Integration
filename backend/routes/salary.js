@@ -272,23 +272,28 @@ router.post('/pay', protect, async (req, res) => {
 
     const shifts = await Shift.findAll({ where: whereClause });
 
-    if (shifts.length === 0) {
-      return res.status(400).json({ message: 'No unpaid shifts found for the selected period' });
-    }
-
-    const paidAt = new Date().toISOString();
-
-    await Shift.update(
-      { isPaid: true, paidAt },
-      { where: whereClause }
-    );
-
     const totalShifts = shifts.length;
     let totalAmount = 0;
 
     if (paymentType === 'monthly' && monthlySalary > 0) {
-      const monthlyRate = monthlySalary / 26;
-      totalAmount = shifts.length * monthlyRate;
+      // Use calculator to get OT and Holiday premiums
+      const salaryData = calculateMonthlySalary(
+        shifts,
+        paymentType,
+        hourlyRate,
+        monthlySalary,
+        user.overtimeHourlyRate && parseFloat(user.overtimeHourlyRate)
+      );
+      
+      let baseAmount = monthlySalary;
+      if (payPeriod === 'first' || payPeriod === 'second') {
+        baseAmount = monthlySalary / 2;
+      }
+      
+      // Amount is at least baseAmount for the period, plus any OT/Holidays from shifts
+      totalAmount = Math.max(baseAmount, salaryData.baseSalary) + salaryData.totalHolidayPremium + salaryData.overtimePay;
+    } else if (totalShifts === 0) {
+      return res.status(400).json({ message: 'No unpaid shifts found for the selected period' });
     } else if (hourlyRate > 0) {
       shifts.forEach(shift => {
         const regularHours = (shift.morningHours || 0) + (shift.afternoonHours || 0);
@@ -300,8 +305,35 @@ router.post('/pay', protect, async (req, res) => {
       totalAmount = shifts.length * dailySalary;
     }
 
+    const paidAt = new Date().toISOString();
+
+    // Update shifts if any
+    if (totalShifts > 0) {
+      await Shift.update(
+        { isPaid: true, paidAt },
+        { where: whereClause }
+      );
+    }
+
+    // For monthly employees, also update payrollNotes
+    if (paymentType === 'monthly') {
+      try {
+        const currentMonth = startDate ? startDate.slice(0, 7) : new Date().toISOString().slice(0, 7);
+        const periodKey = `${payPeriod}-${currentMonth}`;
+        let notes = {};
+        try {
+          notes = user.payrollNotes ? (typeof user.payrollNotes === 'string' ? JSON.parse(user.payrollNotes) : user.payrollNotes) : {};
+        } catch (e) { notes = {}; }
+        
+        notes[periodKey] = 'PAID';
+        await user.update({ payrollNotes: JSON.stringify(notes) });
+      } catch (noteErr) {
+        console.error('Failed to update payroll notes:', noteErr);
+      }
+    }
+
     res.json({
-      message: `Successfully marked ${totalShifts} shift(s) as paid`,
+      message: `Successfully processed payment for ${user.firstName}`,
       paidCount: totalShifts,
       totalAmount: parseFloat(totalAmount.toFixed(2)),
       payPeriod,
@@ -391,8 +423,24 @@ router.get('/unpaid', protect, async (req, res) => {
 
     let totalAmount = 0;
     if (paymentType === 'monthly' && monthlySalary > 0) {
-      const monthlyRate = monthlySalary / 26;
-      totalAmount = shifts.length * monthlyRate;
+      // Use calculator to get OT and Holiday premiums
+      const salaryData = calculateMonthlySalary(
+        shifts,
+        paymentType,
+        hourlyRate,
+        monthlySalary,
+        user.overtimeHourlyRate && parseFloat(user.overtimeHourlyRate)
+      );
+      
+      let baseAmount = monthlySalary;
+      if (payPeriod === 'first' || payPeriod === 'second') {
+        baseAmount = monthlySalary / 2;
+      } else if (payPeriod === 'monthly') {
+        baseAmount = monthlySalary;
+      }
+      
+      // Amount is at least baseAmount for the period, plus any OT/Holidays from shifts
+      totalAmount = Math.max(baseAmount, salaryData.baseSalary) + salaryData.totalHolidayPremium + salaryData.overtimePay;
     } else if (hourlyRate > 0) {
       shifts.forEach(shift => {
         const regularHours = (shift.morningHours || 0) + (shift.afternoonHours || 0);

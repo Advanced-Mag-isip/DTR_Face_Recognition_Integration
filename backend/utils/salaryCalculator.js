@@ -214,11 +214,20 @@ const calculateMonthlySalary = (shifts, paymentType, hourlyRate, monthlySalary, 
 
   // Calculate totals
   const daysWorked = uniqueWorkDays.size;
-  const totalBasePay = normalPay.basePay + regularHolidayPay.basePay + 
+  let totalBasePay = normalPay.basePay + regularHolidayPay.basePay + 
                        specialNonWorkingPay.basePay + specialWorkingPay.basePay;
   const totalHolidayPremium = regularHolidayPay.holidayPremium + specialNonWorkingPay.holidayPremium;
   const totalOvertimePay = normalPay.overtimePay + regularHolidayPay.overtimePay + 
                            specialNonWorkingPay.overtimePay + specialWorkingPay.overtimePay;
+  
+  // Fixed Monthly Salary Logic: 
+  // If monthly payment type and calculated base is less than monthly salary, use monthly salary
+  if (paymentType === 'monthly' && monthlySalary > 0) {
+    if (totalBasePay < monthlySalary) {
+      totalBasePay = monthlySalary;
+    }
+  }
+
   const grossPay = totalBasePay + totalHolidayPremium + totalOvertimePay;
 
   return {

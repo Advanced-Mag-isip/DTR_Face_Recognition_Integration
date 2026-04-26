@@ -23,16 +23,17 @@ Implement the "Salary Loop" feature for the DTR system and transition the workfl
 - [x] **Step 7**: Employee Table Enhancements - Added Position, Payment Type, Salary Rate, Remaining Salary columns, and Pay button in Actions.
 - [x] **Step 8**: Payroll Report - Full-page report with 1st Half, 2nd Half, and Monthly tabs, department filter, notes editing, CSV export.
 - [x] **Step 9**: Fixed isPaid status - Payroll Report now correctly shows PAID/UNPAID based on shift.isPaid field.
-- [x] Database field `users.payrollNotes` - JSON field for storing payroll notes per period.
+- [x] **Step 10**: Fixed Monthly Salary Logic - Implemented logic for employees with fixed salaries (paid even with 0 shifts).
+- [x] **Step 11**: SalaryReport Enhancements - Added Paid Status, Payment Method, and Remaining Balance display.
 
 ## 🚧 In Progress
-- None - All core salary loop features are implemented.
+- **Bug Fixing & Refinement**: Polishing UI layouts and fixing account deletion issues.
 
 ## 📋 Pending Steps (Future Implementation)
-1. **Fixed Monthly Salary Logic** - For employees who don't add shifts but receive fixed monthly salary.
-2. **SalaryReport Enhancements** - Add paid status, payment method, remaining balance display.
-3. **Build Deployment**: Run `npm run build` and deploy to VPS.
-4. **Git Integration**: Establish `git pull` as deployment method on VPS.
+1. **Build Deployment**: Run `npm run build` and deploy to VPS.
+2. **Git Integration**: Establish `git pull` as deployment method on VPS.
+3. **Automated Backups**: Script to auto-backup MySQL database daily.
+4. **Security Hardening**: Implement rate limiting and secure headers for production.
 
 ## 💡 Key Logic Implemented
 ### Employee Props

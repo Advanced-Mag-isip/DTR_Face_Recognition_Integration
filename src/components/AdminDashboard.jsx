@@ -489,7 +489,7 @@ function AdminDashboard() {
 
               <StatsCards data={getEmployeeShifts(selectedEmployee.id)} />
 
-              {(selectedEmployee.dailySalary && selectedEmployee.dailySalary > 0) && (
+              {(selectedEmployee.dailySalary > 0 || selectedEmployee.hourlyRate > 0 || selectedEmployee.monthlySalary > 0) && (
                 <div className="mt-8">
                   <SalaryReport
                     dailySalary={selectedEmployee.dailySalary}
@@ -499,6 +499,10 @@ function AdminDashboard() {
                     paymentType={selectedEmployee.paymentType}
                     hourlyRate={selectedEmployee.hourlyRate}
                     monthlySalary={selectedEmployee.monthlySalary}
+                    paymentMethod={selectedEmployee.paymentMethod}
+                    paymentDetails={selectedEmployee.paymentDetails}
+                    payrollNotes={selectedEmployee.payrollNotes}
+                    selectedMonth={selectedMonth}
                   />
                 </div>
               )}

@@ -4,7 +4,7 @@ import { RiInformationLine } from 'react-icons/ri';
 import { getCurrentMonthRange } from '../utils/dateUtils';
 import { getSalaryForPeriod } from '../utils/salaryApi';
 
-function SalaryReport({ dailySalary, overtimeHourlyRate, shifts, employeeId, paymentType, hourlyRate: propHourlyRate, monthlySalary: propMonthlySalary }) {
+function SalaryReport({ dailySalary, overtimeHourlyRate, shifts, employeeId, paymentType, hourlyRate: propHourlyRate, monthlySalary: propMonthlySalary, paymentMethod, paymentDetails, payrollNotes, selectedMonth }) {
   const [salaryData, setSalaryData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [showBreakdown, setShowBreakdown] = useState(false);
@@ -13,8 +13,18 @@ function SalaryReport({ dailySalary, overtimeHourlyRate, shifts, employeeId, pay
     const fetchSalaryData = async () => {
       setLoading(true);
       try {
-        const range = getCurrentMonthRange();
-        const data = await getSalaryForPeriod(range.startDate, range.endDate, employeeId);
+        let start, end;
+        if (selectedMonth) {
+          const [year, monthNum] = selectedMonth.split('-').map(Number);
+          start = new Date(year, monthNum - 1, 1).toISOString().split('T')[0];
+          end = new Date(year, monthNum, 0).toISOString().split('T')[0];
+        } else {
+          const range = getCurrentMonthRange();
+          start = range.startDate;
+          end = range.endDate;
+        }
+        
+        const data = await getSalaryForPeriod(start, end, employeeId);
         setSalaryData(data);
       } catch (err) {
         console.error('Error fetching salary data:', err);
@@ -47,6 +57,7 @@ function SalaryReport({ dailySalary, overtimeHourlyRate, shifts, employeeId, pay
 
       let totalRegularHours = 0;
       let totalOvertimeHours = 0;
+      let totalHolidayPremium = 0;
       const uniqueWorkDays = new Set();
 
       shifts.forEach(shift => {
@@ -55,37 +66,51 @@ function SalaryReport({ dailySalary, overtimeHourlyRate, shifts, employeeId, pay
         if (shift.date) {
           uniqueWorkDays.add(shift.date);
         }
+        
+        // Basic holiday logic for local calculation
+        if (shift.isHoliday && shift.holidayType) {
+          const multiplier = shift.holidayType === 'regular' ? 1.0 : 
+                            shift.holidayType === 'special_non_working' ? 0.3 : 0;
+          const regHours = (shift.morningHours || 0) + (shift.afternoonHours || 0);
+          totalHolidayPremium += (regHours * hourlyRate) * multiplier;
+        }
       });
 
       const daysWorked = uniqueWorkDays.size;
-      const regularPay = totalRegularHours * hourlyRate;
+      let baseSalary = totalRegularHours * hourlyRate;
+      
+      // Fixed Monthly Logic
+      if (payType === 'monthly' && monthly > 0) {
+        if (baseSalary < monthly) {
+          baseSalary = monthly;
+        }
+      }
+      
       const overtimePay = totalOvertimeHours * otRate;
-      const currentMonthPay = regularPay + overtimePay;
+      const grossPay = baseSalary + overtimePay + totalHolidayPremium;
 
       setSalaryData({
         daysWorked,
         totalRegularHours: parseFloat(totalRegularHours.toFixed(2)),
         totalOvertimeHours: parseFloat(totalOvertimeHours.toFixed(2)),
-        regularPay: parseFloat(regularPay.toFixed(2)),
+        regularPay: parseFloat(baseSalary.toFixed(2)),
         hourlyRate: parseFloat(hourlyRate.toFixed(2)),
         overtimeRate: parseFloat(otRate.toFixed(2)),
         overtimePay: parseFloat(overtimePay.toFixed(2)),
-        grossPay: parseFloat(currentMonthPay.toFixed(2)),
-        baseSalary: parseFloat(regularPay.toFixed(2)),
+        totalHolidayPremium: parseFloat(totalHolidayPremium.toFixed(2)),
+        grossPay: parseFloat(grossPay.toFixed(2)),
+        baseSalary: parseFloat(baseSalary.toFixed(2)),
         dailySalary: salary,
         monthlySalary: monthly,
         paymentType: payType,
         breakdown: {
-          normal: { label: 'Normal Days', daysWorked, totalPay: parseFloat(regularPay.toFixed(2)) },
-          regular: { label: 'Regular Holidays', daysWorked: 0, totalPay: 0 },
-          specialNonWorking: { label: 'Special Non-Working', daysWorked: 0, totalPay: 0 },
-          specialWorking: { label: 'Special Working', daysWorked: 0, totalPay: 0 }
+          normal: { label: 'Normal Days', daysWorked, totalPay: parseFloat(baseSalary.toFixed(2)) }
         }
       });
     };
 
     fetchSalaryData();
-  }, [dailySalary, overtimeHourlyRate, shifts, employeeId, paymentType, propHourlyRate, propMonthlySalary]);
+  }, [dailySalary, overtimeHourlyRate, shifts, employeeId, paymentType, propHourlyRate, propMonthlySalary, selectedMonth]);
 
   if (loading) {
     return (
@@ -99,6 +124,52 @@ function SalaryReport({ dailySalary, overtimeHourlyRate, shifts, employeeId, pay
   }
 
   if (!salaryData) return null;
+
+  // Calculate paid/unpaid status
+  const calculatePaymentStatus = () => {
+    const payType = salaryData.paymentType || paymentType || 'hourly';
+    
+    if (payType === 'monthly') {
+      let savedNotes = {};
+      try {
+        if (payrollNotes) {
+          savedNotes = typeof payrollNotes === 'string' ? JSON.parse(payrollNotes) : payrollNotes;
+        }
+      } catch (e) { savedNotes = {}; }
+      
+      const noteKey = `monthly-${selectedMonth}`;
+      const isPaid = savedNotes[noteKey] === 'PAID';
+      
+      return {
+        status: isPaid ? 'PAID' : 'UNPAID',
+        paidAmount: isPaid ? salaryData.grossPay : 0,
+        unpaidAmount: isPaid ? 0 : salaryData.grossPay
+      };
+    } else {
+      // For hourly, check each shift
+      let paidAmount = 0;
+      let unpaidAmount = 0;
+      
+      // Note: This is an approximation since we don't have per-shift pay here easily
+      // but we can estimate based on ratio of paid shifts
+      const totalShifts = shifts.length;
+      const paidShifts = shifts.filter(s => s.isPaid).length;
+      
+      if (totalShifts === 0) return { status: '-', paidAmount: 0, unpaidAmount: 0 };
+      
+      const ratio = paidShifts / totalShifts;
+      paidAmount = salaryData.grossPay * ratio;
+      unpaidAmount = salaryData.grossPay * (1 - ratio);
+      
+      return {
+        status: paidShifts === totalShifts ? 'PAID' : paidShifts > 0 ? 'PARTIAL' : 'UNPAID',
+        paidAmount,
+        unpaidAmount
+      };
+    }
+  };
+
+  const paymentStatus = calculatePaymentStatus();
 
   // Use data from API if available, otherwise fall back to props
   const salary = salaryData.dailySalary || (typeof dailySalary === 'string' ? parseFloat(dailySalary) : dailySalary);
@@ -127,14 +198,24 @@ function SalaryReport({ dailySalary, overtimeHourlyRate, shifts, employeeId, pay
 
   const breakdown = salaryData.breakdown || {};
   const totalHolidayPremium = salaryData.totalHolidayPremium || 0;
-  const hasHolidays = (breakdown.regular?.daysWorked || 0) > 0 ||
+  const hasHolidays = totalHolidayPremium > 0 || 
+                      (breakdown.regular?.daysWorked || 0) > 0 ||
                       (breakdown.specialNonWorking?.daysWorked || 0) > 0 ||
                       (breakdown.specialWorking?.daysWorked || 0) > 0;
 
   return (
     <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-5">
       <div className="flex items-center justify-between mb-4">
-        <h3 className="text-base font-bold text-slate-800">Salary Computation</h3>
+        <div className="flex items-center gap-3">
+          <h3 className="text-base font-bold text-slate-800">Salary Computation</h3>
+          <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold tracking-wider uppercase ${
+            paymentStatus.status === 'PAID' ? 'bg-green-100 text-green-700' :
+            paymentStatus.status === 'PARTIAL' ? 'bg-blue-100 text-blue-700' :
+            'bg-amber-100 text-amber-700'
+          }`}>
+            {paymentStatus.status}
+          </span>
+        </div>
         <div className="flex items-center gap-2">
           <label className="flex items-center gap-2 cursor-pointer select-none">
             <input
@@ -147,6 +228,21 @@ function SalaryReport({ dailySalary, overtimeHourlyRate, shifts, employeeId, pay
           </label>
         </div>
       </div>
+
+      {/* Payment Method - New Section */}
+      {(paymentMethod || paymentDetails) && (
+        <div className="mb-4 flex items-center gap-3 px-3 py-2 bg-blue-50 rounded-lg border border-blue-100">
+          <RiBankCardLine className="w-4 h-4 text-blue-500" />
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+            <p className="text-xs font-semibold text-blue-700">
+              Method: <span className="font-bold uppercase">{paymentMethod?.replace('_', ' ') || 'GCash'}</span>
+            </p>
+            <p className="text-xs font-semibold text-blue-700">
+              Details: <span className="font-bold">{paymentDetails || '-'}</span>
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Summary Row - Always Visible */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
@@ -166,12 +262,24 @@ function SalaryReport({ dailySalary, overtimeHourlyRate, shifts, employeeId, pay
           <p className="text-base font-bold text-slate-800">{salaryData.daysWorked}</p>
         </div>
         <div className="bg-slate-50 p-3 rounded-lg">
-          <p className="text-xs text-slate-500 font-medium">{payType === 'monthly' ? 'Daily Rate' : 'Hourly Rate'}</p>
-          <p className="text-base font-bold text-slate-800">₱{(payType === 'monthly' ? displayDailyRate : displayHourlyRate)?.toFixed(2)}</p>
+          <p className="text-xs text-slate-500 font-medium">Total Hours</p>
+          <p className="text-base font-bold text-slate-800">{salaryData.totalRegularHours?.toFixed(2)}</p>
         </div>
         <div className="bg-slate-50 p-3 rounded-lg">
           <p className="text-xs text-slate-500 font-medium">OT Hours</p>
           <p className="text-base font-bold text-slate-800">{salaryData.totalOvertimeHours?.toFixed(2)}</p>
+        </div>
+      </div>
+
+      {/* Payment Balances - New Section */}
+      <div className="grid grid-cols-2 gap-3 mb-4">
+        <div className="bg-green-50 border border-green-100 p-3 rounded-lg">
+          <p className="text-[10px] text-green-600 font-bold uppercase tracking-wider mb-1">Paid Amount</p>
+          <p className="text-lg font-bold text-green-700">₱{paymentStatus.paidAmount.toLocaleString('en-PH', { minimumFractionDigits: 2 })}</p>
+        </div>
+        <div className="bg-amber-50 border border-amber-100 p-3 rounded-lg">
+          <p className="text-[10px] text-amber-600 font-bold uppercase tracking-wider mb-1">Remaining Balance</p>
+          <p className="text-lg font-bold text-amber-700">₱{paymentStatus.unpaidAmount.toLocaleString('en-PH', { minimumFractionDigits: 2 })}</p>
         </div>
       </div>
 

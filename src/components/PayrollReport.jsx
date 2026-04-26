@@ -131,6 +131,39 @@ function PayrollReport({ employees, shifts, departments = [] }) {
         .filter(emp => emp.isActive !== false && emp.paymentType === 'monthly')
         .map(emp => {
           const monthlySalary = parseFloat(emp.monthlySalary) || 0;
+          const empShifts = shifts.filter(s => 
+            s.employeeId === emp.id && 
+            s.date >= startDate && 
+            s.date <= endDate
+          );
+          
+          let overtimeHours = 0;
+          let holidayPremium = 0;
+          let holidayNote = '';
+          
+          const hourlyRate = (monthlySalary / 26) / 8;
+          const overtimeHourlyRate = parseFloat(emp.overtimeHourlyRate) || hourlyRate;
+          
+          empShifts.forEach(shift => {
+            overtimeHours += shift.overtimeHours || 0;
+            
+            // Calculate holiday premium if applicable
+            if (shift.isHoliday && shift.holidayType) {
+              const multiplier = shift.holidayType === 'regular' ? 1.0 : 
+                                shift.holidayType === 'special_non_working' ? 0.3 : 0;
+              const regHours = (shift.morningHours || 0) + (shift.afternoonHours || 0);
+              holidayPremium += (regHours * hourlyRate) * multiplier;
+            }
+          });
+          
+          const holidayShifts = empShifts.filter(s => s.isHoliday);
+          if (holidayShifts.length > 0) {
+            const holidays = [...new Set(holidayShifts.map(s => s.holidayName))];
+            holidayNote = holidays.join(', ');
+          }
+          
+          const overtimePay = overtimeHours * overtimeHourlyRate;
+          const totalAmount = monthlySalary + overtimePay + holidayPremium;
           
           let savedNotes = {};
           try {
@@ -149,9 +182,9 @@ function PayrollReport({ employees, shifts, departments = [] }) {
             rate: monthlySalary > 0 ? `${monthlySalary.toLocaleString()}/month` : '-',
             paymentDetails: emp.paymentDetails || emp.paymentMethod || '-',
             adjustments: '',
-            amount: monthlySalary,
+            amount: totalAmount,
             status: isPaidNote ? 'PAID' : 'UNPAID',
-            note: savedNotes[noteKey] || ''
+            note: savedNotes[noteKey] || holidayNote || (overtimeHours > 0 ? `${overtimeHours} OT hours` : '')
           };
         });
       
@@ -477,16 +510,15 @@ function PayrollReport({ employees, shifts, departments = [] }) {
               </tbody>
               <tfoot>
                 <tr className="bg-gradient-to-r from-slate-100 to-slate-50">
-                  <td className="px-6 py-4 font-bold text-slate-800" colSpan={isMonthly ? 3 : 4}>
+                  <td className="px-6 py-4 font-bold text-slate-800" colSpan={isMonthly ? 5 : 6}>
                     TOTAL ({displayData.length} employees)
                   </td>
-                  {!isMonthly && <td className="px-6 py-4"></td>}
                   <td className="px-6 py-4 text-right">
                     <span className="text-xl font-bold text-green-700">
                       ₱{totalAmount.toLocaleString('en-PH', { minimumFractionDigits: 2 })}
                     </span>
                   </td>
-                  <td className="px-6 py-4" colSpan={2}></td>
+                  <td className="px-6 py-4" colSpan={isMonthly ? 1 : 1}></td>
                 </tr>
               </tfoot>
             </table>
