@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { RiFileTextLine, RiDownloadLine, RiEditLine, RiCheckboxCircleLine, RiCloseLine, RiCalendarLine, RiGroupLine, RiMoneyDollarCircleLine } from 'react-icons/ri';
+import { RiFileTextLine, RiDownloadLine, RiEditLine, RiCheckboxCircleLine, RiCloseLine, RiCalendarLine, RiGroupLine, RiMoneyDollarCircleLine, RiArrowDownSLine } from 'react-icons/ri';
 import { savePayrollNote } from '../utils/usersApi';
 
 function PayrollReport({ employees, shifts, departments = [] }) {
@@ -332,16 +332,19 @@ function PayrollReport({ employees, shifts, departments = [] }) {
               <RiGroupLine className="w-4 h-4" />
               Department
             </label>
-            <select
-              value={selectedDepartment}
-              onChange={(e) => setSelectedDepartment(e.target.value)}
-              className="w-full px-4 py-3 rounded-xl border border-slate-200 text-slate-800 font-medium focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 transition-all bg-white"
-            >
-              <option value="all">All Departments</option>
-              {deptList.filter(d => d !== 'all').map(dept => (
-                <option key={dept} value={dept}>{dept}</option>
-              ))}
-            </select>
+            <div className="relative">
+              <select
+                value={selectedDepartment}
+                onChange={(e) => setSelectedDepartment(e.target.value)}
+                className="appearance-none w-full px-4 py-3 pr-10 rounded-xl border border-slate-200 text-slate-800 font-medium focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 transition-all bg-white"
+              >
+                <option value="all">All Departments</option>
+                {deptList.filter(d => d !== 'all').map(dept => (
+                  <option key={dept} value={dept}>{dept}</option>
+                ))}
+              </select>
+              <RiArrowDownSLine className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400 pointer-events-none" />
+            </div>
           </div>
 
           {/* Pay Period Tabs */}

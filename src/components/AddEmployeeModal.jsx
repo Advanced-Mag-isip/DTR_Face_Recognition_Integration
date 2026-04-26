@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { RiArrowDownSLine } from 'react-icons/ri';
 
 const ROLES = [
   { value: 'employee', label: 'Employee' },
@@ -123,33 +124,39 @@ function AddEmployeeModal({ isOpen, onClose, onSubmit, loading, employee, depart
               <div className="grid grid-cols-2 gap-4">
                 <div className="flex flex-col gap-2">
                   <label className="text-sm font-semibold text-slate-700">Department</label>
-                  <select
-                    name="department"
-                    value={formData.department}
-                    onChange={handleInputChange}
-                    className="w-full bg-slate-50 border border-slate-200 px-4 py-4 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all"
-                  >
-                    {departments.length > 0 ? (
-                      departments.map(dept => (
-                        <option key={dept.id || dept} value={dept.name}>{dept.name}</option>
-                      ))
-                    ) : (
-                      <option value="">No departments</option>
-                    )}
-                  </select>
+                  <div className="relative">
+                    <select
+                      name="department"
+                      value={formData.department}
+                      onChange={handleInputChange}
+                      className="appearance-none w-full bg-slate-50 border border-slate-200 px-4 py-4 pr-10 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all"
+                    >
+                      {departments.length > 0 ? (
+                        departments.map(dept => (
+                          <option key={dept.id || dept} value={dept.name}>{dept.name}</option>
+                        ))
+                      ) : (
+                        <option value="">No departments</option>
+                      )}
+                    </select>
+                    <RiArrowDownSLine className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400 pointer-events-none" />
+                  </div>
                 </div>
                 <div className="flex flex-col gap-2">
                   <label className="text-sm font-semibold text-slate-700">Role</label>
-                  <select
-                    name="role"
-                    value={formData.role}
-                    onChange={handleInputChange}
-                    className="w-full bg-slate-50 border border-slate-200 px-4 py-4 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all"
-                  >
-                    {ROLES.map(role => (
-                      <option key={role.value} value={role.value}>{role.label}</option>
-                    ))}
-                  </select>
+                  <div className="relative">
+                    <select
+                      name="role"
+                      value={formData.role}
+                      onChange={handleInputChange}
+                      className="appearance-none w-full bg-slate-50 border border-slate-200 px-4 py-4 pr-10 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all"
+                    >
+                      {ROLES.map(role => (
+                        <option key={role.value} value={role.value}>{role.label}</option>
+                      ))}
+                    </select>
+                    <RiArrowDownSLine className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400 pointer-events-none" />
+                  </div>
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-4">
@@ -165,14 +172,17 @@ function AddEmployeeModal({ isOpen, onClose, onSubmit, loading, employee, depart
                 </div>
                 <div className="flex flex-col gap-2">
                   <label className="text-sm font-semibold text-slate-700">Payment Type</label>
-                  <select 
-                    name="paymentType"
-                    value={formData.paymentType}
-                    onChange={handleInputChange}
-                    className="w-full bg-slate-50 border border-slate-200 px-4 py-4 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all">
-                    <option value="hourly">Hourly</option>
-                    <option value="monthly">Monthly</option>
-                  </select>
+                  <div className="relative">
+                    <select 
+                      name="paymentType"
+                      value={formData.paymentType}
+                      onChange={handleInputChange}
+                      className="appearance-none w-full bg-slate-50 border border-slate-200 px-4 py-4 pr-10 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all">
+                      <option value="hourly">Hourly</option>
+                      <option value="monthly">Monthly</option>
+                    </select>
+                    <RiArrowDownSLine className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400 pointer-events-none" />
+                  </div>
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-4">
@@ -237,15 +247,18 @@ function AddEmployeeModal({ isOpen, onClose, onSubmit, loading, employee, depart
               <div className="grid grid-cols-2 gap-4">
                 <div className="flex flex-col gap-2">
                   <label className="text-sm font-semibold text-slate-700">Payment Method</label>
-                  <select 
-                    name="paymentMethod"
-                    value={formData.paymentMethod}
-                    onChange={handleInputChange}
-                    className="w-full bg-slate-50 border border-slate-200 px-4 py-4 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all">
-                    <option value="gcash">GCash</option>
-                    <option value="cash">Cash</option>
-                    <option value="bank_transfer">Bank Transfer</option>
-                  </select>
+                  <div className="relative">
+                    <select 
+                      name="paymentMethod"
+                      value={formData.paymentMethod}
+                      onChange={handleInputChange}
+                      className="appearance-none w-full bg-slate-50 border border-slate-200 px-4 py-4 pr-10 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all">
+                      <option value="gcash">GCash</option>
+                      <option value="cash">Cash</option>
+                      <option value="bank_transfer">Bank Transfer</option>
+                    </select>
+                    <RiArrowDownSLine className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400 pointer-events-none" />
+                  </div>
                 </div>
               </div>
               <div className="flex flex-col gap-2">

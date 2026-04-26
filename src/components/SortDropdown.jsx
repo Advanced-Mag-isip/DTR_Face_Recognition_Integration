@@ -11,7 +11,7 @@ function SortDropdown({ sortOrder, setSortOrder }) {
         <option value="newest">Newest First</option>
         <option value="oldest">Oldest First</option>
       </select>
-      <RiArrowDownSLine className="absolute right-2 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-500 pointer-events-none" />
+      <RiArrowDownSLine className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-500 pointer-events-none" />
     </div>
   );
 }
