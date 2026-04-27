@@ -99,6 +99,20 @@ function PaySalaryModal({ isOpen, onClose, employees, lockedEmployee }) {
     const { paymentType, hourlyRate, monthlySalary, overtimeHourlyRate } = employee;
     const selectedShifts = unpaidData.shifts.filter(s => selectedShiftIds.includes(s.id));
 
+    // Debug logging
+    console.log('=== PaySalaryModal Debug ===');
+    console.log('Employee:', employee?.firstName, employee?.lastName, '(' + employee?.employeeId + ')');
+    console.log('Pay Period:', selectedPeriod, '| Month:', selectedMonth);
+    console.log('Date Range (expected):', selectedPeriod === 'first' ? 'April 1-15' : selectedPeriod === 'second' ? 'April 16-30' : 'April 1-30');
+    console.log('Total Shifts from API:', unpaidData?.shifts?.length);
+    console.log('Selected Shift IDs:', selectedShiftIds.length);
+    console.log('Hourly Rate:', hourlyRate);
+    if (unpaidData?.shifts?.length > 0) {
+      console.log('Shift Dates from API:', unpaidData.shifts.map(s => s.date).sort());
+    }
+    console.log('Selected Shifts:', selectedShiftIds.length);
+    // End debug
+
     let total = 0;
     const otRate = overtimeHourlyRate ? parseFloat(overtimeHourlyRate) : null;
     
@@ -112,6 +126,9 @@ function PaySalaryModal({ isOpen, onClose, employees, lockedEmployee }) {
         total += calculateShiftPay(shift, hourlyRate, otRate || hourlyRate);
       });
     }
+
+    console.log('Calculated Total:', total);
+    console.log('=====================');
 
     return parseFloat(total.toFixed(2));
   };

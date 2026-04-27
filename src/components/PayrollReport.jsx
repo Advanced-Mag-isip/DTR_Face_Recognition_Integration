@@ -87,6 +87,20 @@ function PayrollReport({ employees, shifts, departments = [] }) {
           let overtimeHours = 0;
           let holidayNote = '';
           
+          // Debug logging
+          console.log('=== PayrollReport Debug ===');
+          console.log('Employee:', emp.firstName, emp.lastName, '(' + emp.employeeId + ')');
+          console.log('Pay Cycle:', selectedCycle, '| Month:', selectedMonth);
+          console.log('Date Range:', startDate, 'to', endDate);
+          console.log('Shift Prop Length:', shifts.length);
+          console.log('Filtered Shifts for Employee:', empShifts.length);
+          if (empShifts.length > 0) {
+            console.log('Shift Dates from Prop:', empShifts.map(s => s.date).sort());
+          }
+          console.log('Hourly Rate:', hourlyRate);
+          console.log('=====================');
+          // End debug
+          
           const holidayShifts = empShifts.filter(s => s.isHoliday);
           if (holidayShifts.length > 0) {
             const holidays = [...new Set(holidayShifts.map(s => s.holidayName))];
