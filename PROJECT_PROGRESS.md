@@ -1,13 +1,13 @@
 # 🎯 Project Progress & Context Manifest
 
 ## 📋 Current Objective
-Implement the "Salary Loop" feature for the DTR system and transition the workflow from manual WinSCP uploads to a Git-based, production-ready architecture.
+Implement the \"Salary Loop\" feature for the DTR system and transition the workflow from manual WinSCP uploads to a Git-based, production-ready architecture.
 
 ## 🏗 System Architecture (Current)
-- **Frontend**: React 19 (Vite) - *Currently running in Dev Mode on VPS.*
+- **Frontend**: React 19 (Vite) - *Served as static files by Backend in Production.*
 - **Backend**: Node.js/Express - *Managed by PM2 (Process Name: 'server', ID: 0).*
-- **Database**: MySQL - *Managed via TablePlus and Sequelize.*
-- **Environment**: Linux VPS (Sandbox) at `/home/advancedthinkers-dtr/htdocs/dtr.advancedthinkers.app/`.
+- **Database**: MySQL - *Managed via phpMyAdmin/TablePlus.*
+- **Environment**: Linux VPS (Production) at `/home/advancedthinkers-dtr/htdocs/dtr.advancedthinkers.app/`.
 
 ## ✅ Completed Steps
 - [x] Initial Codebase Analysis.
@@ -25,15 +25,45 @@ Implement the "Salary Loop" feature for the DTR system and transition the workfl
 - [x] **Step 9**: Fixed isPaid status - Payroll Report now correctly shows PAID/UNPAID based on shift.isPaid field.
 - [x] **Step 10**: Fixed Monthly Salary Logic - Implemented logic for employees with fixed salaries (paid even with 0 shifts).
 - [x] **Step 11**: SalaryReport Enhancements - Added Paid Status, Payment Method, and Remaining Balance display.
+- [x] **Step 12**: UI Polish - Fixed dropdown icon spacing and standardized layout across all components.
+- [x] **Step 13**: Production Readiness - Fixed `server.js` catch-all route and created `deploy.sh` script.
 
 ## 🚧 In Progress
-- **Bug Fixing & Refinement**: Polishing UI layouts and fixing account deletion issues.
+- **Production Transition**: User confirmed all employees have `hourlyRate`. Manual SQL migration prepared for Cloud Panel execution.
 
-## 📋 Pending Steps (Future Implementation)
-1. **Build Deployment**: Run `npm run build` and deploy to VPS.
-2. **Git Integration**: Establish `git pull` as deployment method on VPS.
-3. **Automated Backups**: Script to auto-backup MySQL database daily.
-4. **Security Hardening**: Implement rate limiting and secure headers for production.
+## 📋 Pending Steps (Next Session)
+1. **Database Migration**: 
+   - Execute the **Master SQL Patch** below in the VPS Cloud Panel (phpMyAdmin).
+2. **Production Code Deployment**:
+   - Run `chmod +x deploy.sh` on VPS.
+   - Run `./deploy.sh` to pull changes, build frontend, and restart PM2.
+3. **Validation**: Verify that employees with `dailySalary` have been successfully migrated to `hourlyRate`.
+
+## 🗄️ Master SQL Patch (Run this in phpMyAdmin)
+```sql
+-- 1. CLEAN UP REDUNDANT INDEXES (Users)
+ALTER TABLE `Users` DROP INDEX `employeeId_2`, DROP INDEX `employeeId_3`, DROP INDEX `employeeId_4`, DROP INDEX `employeeId_5`, DROP INDEX `employeeId_6`, DROP INDEX `employeeId_7`, DROP INDEX `employeeId_8`, DROP INDEX `employeeId_9`, DROP INDEX `employeeId_10`, DROP INDEX `employeeId_11`, DROP INDEX `employeeId_12`, DROP INDEX `employeeId_13`, DROP INDEX `employeeId_14`, DROP INDEX `employeeId_15`, DROP INDEX `employeeId_16`, DROP INDEX `employeeId_17`, DROP INDEX `employeeId_18`, DROP INDEX `employeeId_19`, DROP INDEX `employeeId_20`, DROP INDEX `employeeId_21`, DROP INDEX `employeeId_22`, DROP INDEX `employeeId_23`, DROP INDEX `employeeId_24`, DROP INDEX `employeeId_25`, DROP INDEX `employeeId_26`, DROP INDEX `employeeId_27`, DROP INDEX `employeeId_28`, DROP INDEX `employeeId_29`, DROP INDEX `employeeId_30`, DROP INDEX `employeeId_31`, DROP INDEX `employeeId_32`, DROP INDEX `employeeId_33`, DROP INDEX `employeeId_34`, DROP INDEX `employeeId_35`, DROP INDEX `employeeId_36`, DROP INDEX `employeeId_37`, DROP INDEX `employeeId_38`, DROP INDEX `employeeId_39`, DROP INDEX `employeeId_40`, DROP INDEX `employeeId_41`, DROP INDEX `employeeId_42`, DROP INDEX `employeeId_43`, DROP INDEX `employeeId_44`, DROP INDEX `employeeId_45`, DROP INDEX `employeeId_46`, DROP INDEX `employeeId_47`, DROP INDEX `employeeId_48`, DROP INDEX `employeeId_49`, DROP INDEX `employeeId_50`, DROP INDEX `employeeId_51`, DROP INDEX `employeeId_52`, DROP INDEX `employeeId_53`, DROP INDEX `employeeId_54`, DROP INDEX `employeeId_55`, DROP INDEX `employeeId_56`, DROP INDEX `employeeId_57`, DROP INDEX `employeeId_58`, DROP INDEX `employeeId_59`, DROP INDEX `employeeId_60`, DROP INDEX `employeeId_61`, DROP INDEX `employeeId_62`;
+
+-- 2. ADD NEW COLUMNS TO Users
+ALTER TABLE `Users` 
+ADD COLUMN `hourlyRate` DECIMAL(10, 2) DEFAULT 0.00 AFTER `dailySalary`,
+ADD COLUMN `monthlySalary` DECIMAL(12, 2) DEFAULT 0.00 AFTER `hourlyRate`,
+ADD COLUMN `paymentType` ENUM('monthly', 'hourly') DEFAULT 'hourly' AFTER `monthlySalary`,
+ADD COLUMN `paymentMethod` ENUM('cash', 'gcash', 'bank_transfer') DEFAULT 'gcash' AFTER `paymentType`,
+ADD COLUMN `paymentDetails` VARCHAR(255) NULL AFTER `paymentMethod`,
+ADD COLUMN `payrollNotes` TEXT NULL AFTER `paymentDetails`;
+
+-- 3. MIGRATE DATA (Daily -> Hourly)
+UPDATE `Users` 
+SET `hourlyRate` = `dailySalary` / 8,
+    `paymentType` = 'hourly'
+WHERE `dailySalary` > 0;
+
+-- 4. ADD NEW COLUMNS TO Shifts
+ALTER TABLE `Shifts` 
+ADD COLUMN `isPaid` BOOLEAN DEFAULT FALSE AFTER `holidayName`,
+ADD COLUMN `paidAt` DATETIME NULL AFTER `isPaid`;
+```
 
 ## 💡 Key Logic Implemented
 ### Employee Props
@@ -47,102 +77,8 @@ Implement the "Salary Loop" feature for the DTR system and transition the workfl
 | `monthlySalary` | Monthly salary (for monthly workers) |
 | `dailySalary` | Daily rate (legacy) |
 | `overtimeHourlyRate` | Overtime rate |
-| `payrollNotes` | JSON - stores notes like "PAID" or custom notes per period |
-
-### Salary Calculation
-- Hourly workers: Uses `hourlyRate` or derives from `dailySalary / 8`
-- Monthly workers: Derives hourly rate from `monthlySalary / 26 / 8`
-
-### Shift Fields
-| Field | Description |
-|-------|-------------|
-| `isPaid` | Boolean - whether shift has been paid |
-| `paidAt` | Timestamp - when shift was paid |
-
-### Pay Period Options
-- **1st Cut-off**: Days 1-15 (Paid on 2nd Friday of month)
-- **2nd Cut-off**: Days 16-End (Paid on last Friday of month)
-- **Monthly**: Full month (Paid on last Friday of month)
-
-### Payroll Report Status Logic
-- **Hourly/Daily**: Checks `shift.isPaid` for each shift. All paid = "PAID", any unpaid = "UNPAID"
-- **Monthly**: Checks if "PAID" note exists in `payrollNotes` for that period
-
-## 🛠 Server Access Notes
-- **User**: root
-- **Directory**: `/home/advancedthinkers-dtr/htdocs/dtr.advancedthinkers.app/`
-- **PM2 App**: `server`
-- **DB Backup Path**: `/home/advancedthinkers-dtr/backups/`
-
-## 📝 Future Implementation: Fixed Monthly Salary Logic
-
-### Problem Statement
-Some employees receive a **fixed monthly salary** regardless of whether they add shifts or come to the office. They don't need to log shifts - their salary is simply paid at the end of the month.
-
-Currently, if a monthly employee adds no shifts, their Payroll shows ₱0 (incorrect).
-
-### Proposed Solution
-For `paymentType = 'monthly'` employees in Payroll Report:
-
-```
-IF employee has shifts in period:
-    amount = calculated from shifts
-ELSE:
-    amount = monthlySalary (full month)
-```
-
-### Implementation Steps
-1. **Backend**: Modify Payroll Report calculation for monthly employees
-2. **Frontend**: Automatic detection - no changes needed
-3. **Database**: No new fields needed (uses existing `monthlySalary`)
-
-### Files to Modify
-- `backend/routes/salary.js` - Update `/unpaid` and `/pay` routes for monthly logic
-- `src/components/PayrollReport.jsx` - Update amount calculation for monthly employees
-
-## 📝 Future Implementation: SalaryReport Enhancements
-
-### Problem Statement
-SalaryReport component currently doesn't show:
-- Payment status (PAID/UNPAID)
-- Payment method details (GCash number, bank account)
-- Remaining unpaid balance
-
-### Proposed Solution
-Add the following to SalaryReport component:
-1. **Paid Status** - Show if all shifts paid or highlight unpaid ones
-2. **Payment Method** - Display paymentMethod + paymentDetails
-3. **Remaining Balance** - Calculate and show unpaid amount
-
-### Implementation Steps
-1. Pass `paymentMethod`, `paymentDetails`, and shift data to SalaryReport
-2. Calculate unpaid shifts vs paid shifts
-3. Display payment info (if available)
-4. Update UI to show balances
-
-### Files to Modify
-- `src/components/SalaryReport.jsx` - Add new props and display logic
+| `payrollNotes` | JSON - stores notes like \"PAID\" or custom notes per period |
 
 ---
 
-## 🗄 Database Migration Notes
-
-### Completed Migrations
-```sql
--- Add salary fields
-ALTER TABLE users 
-ADD COLUMN hourlyRate DECIMAL(10, 2) DEFAULT 0.00 AFTER dailySalary,
-ADD COLUMN monthlySalary DECIMAL(12, 2) DEFAULT 0.00 AFTER hourlyRate;
-
--- Add isPaid and paidAt to shifts (already done in Step 1)
-ALTER TABLE shifts 
-ADD COLUMN isPaid BOOLEAN DEFAULT FALSE,
-ADD COLUMN paidAt DATETIME;
-
--- Add payroll notes for storing notes per period
-ALTER TABLE users ADD COLUMN payrollNotes TEXT;
-```
-
----
-
-*This file serves as a context bridge. Do not delete until the "Salary Loop" feature is fully deployed.*
+*This file serves as a context bridge. Do not delete until the \"Salary Loop\" feature is fully deployed.*

@@ -47,7 +47,7 @@ app.use('/api/holidays', holidayRoutes);
 app.use('/api/departments', departmentRoutes);
 
 // Catch-all: send React app for any non-API route
-app.get('{*path}', (req, res) => {
+app.get('*', (req, res) => {
     res.sendFile(path.join(distPath, 'index.html'));
 });
 
