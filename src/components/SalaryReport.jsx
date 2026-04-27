@@ -3,6 +3,7 @@ import { RiMoneyDollarCircleLine, RiCalendarCheckLine, RiTimeLine, RiBankCardLin
 import { RiInformationLine } from 'react-icons/ri';
 import { getCurrentMonthRange } from '../utils/dateUtils';
 import { getSalaryForPeriod } from '../utils/salaryApi';
+import { calculateShiftPay } from '../utils/salaryCalculator';
 
 function SalaryReport({ dailySalary, overtimeHourlyRate, shifts, employeeId, paymentType, hourlyRate: propHourlyRate, monthlySalary: propMonthlySalary, paymentMethod, paymentDetails, payrollNotes, selectedMonth }) {
   const [salaryData, setSalaryData] = useState(null);
@@ -148,27 +149,13 @@ function SalaryReport({ dailySalary, overtimeHourlyRate, shifts, employeeId, pay
     } else {
       // For hourly, calculate each shift's actual salary (including holiday premiums)
       const hourlyRateValue = salaryData.hourlyRate || 0;
-      const otRateValue = salaryData.overtimeRate || hourlyRateValue || 0;
-
-      const calculateShiftSalary = (shift) => {
-        const regHours = (shift.morningHours || 0) + (shift.afternoonHours || 0);
-        const otHours = shift.overtimeHours || 0;
-        let shiftPay = (regHours * hourlyRateValue) + (otHours * otRateValue);
-
-        if (shift.isHoliday && shift.holidayType === 'regular') {
-          shiftPay += regHours * hourlyRateValue;
-        } else if (shift.isHoliday && shift.holidayType === 'special_non_working') {
-          shiftPay += regHours * hourlyRateValue * 0.3;
-        }
-
-        return parseFloat(shiftPay.toFixed(2));
-      };
+      const otRateValue = salaryData.overtimeRate || null;
 
       let paidAmount = 0;
       let unpaidAmount = 0;
 
       shifts.forEach(shift => {
-        const shiftSalary = calculateShiftSalary(shift);
+        const shiftSalary = calculateShiftPay(shift, hourlyRateValue, otRateValue);
         if (shift.isPaid) {
           paidAmount += shiftSalary;
         } else {

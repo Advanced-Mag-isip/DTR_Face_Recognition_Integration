@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { RiFileTextLine, RiDownloadLine, RiEditLine, RiCheckboxCircleLine, RiCloseLine, RiCalendarLine, RiGroupLine, RiMoneyDollarCircleLine, RiArrowDownSLine } from 'react-icons/ri';
 import { savePayrollNote } from '../utils/usersApi';
+import { calculateShiftPay } from '../utils/salaryCalculator';
 
 function PayrollReport({ employees, shifts, departments = [] }) {
   const [selectedCycle, setSelectedCycle] = useState('first');
@@ -97,17 +98,7 @@ function PayrollReport({ employees, shifts, departments = [] }) {
             if (dailySalary > 0) {
               amount += dailySalary;
             } else if (hourlyRate > 0) {
-              const regHours = (shift.morningHours || 0) + (shift.afternoonHours || 0);
-              const otHours = shift.overtimeHours || 0;
-              let shiftPay = (regHours * hourlyRate) + (otHours * overtimeHourlyRate);
-              
-              if (shift.isHoliday && shift.holidayType === 'regular') {
-                shiftPay += regHours * hourlyRate;
-              } else if (shift.isHoliday && shift.holidayType === 'special_non_working') {
-                shiftPay += regHours * hourlyRate * 0.3;
-              }
-              
-              amount += shiftPay;
+              amount += calculateShiftPay(shift, hourlyRate, overtimeHourlyRate);
             }
           });
           
@@ -120,7 +111,7 @@ function PayrollReport({ employees, shifts, departments = [] }) {
             days: daysWorked,
             paidDays: paidShifts.length,
             adjustments: '',
-            amount: amount,
+            amount: parseFloat(amount.toFixed(2)),
             status: paidShifts.length === daysWorked && daysWorked > 0 ? 'PAID' : unpaidShifts.length > 0 ? 'UNPAID' : '-',
             note: (() => {
             let savedNotes = {};
@@ -170,7 +161,7 @@ function PayrollReport({ employees, shifts, departments = [] }) {
           }
           
           const overtimePay = overtimeHours * overtimeHourlyRate;
-          const totalAmount = monthlySalary + overtimePay + holidayPremium;
+          const totalAmount = parseFloat((monthlySalary + overtimePay + holidayPremium).toFixed(2));
           
           let savedNotes = {};
           try {
@@ -242,7 +233,7 @@ function PayrollReport({ employees, shifts, departments = [] }) {
   const displayData = selectedCycle === 'first' || selectedCycle === 'second' ? reportData.hourly : reportData.monthly;
   const isMonthly = selectedCycle === 'monthly';
 
-  const totalAmount = displayData.reduce((sum, r) => sum + r.amount, 0);
+  const totalAmount = parseFloat(displayData.reduce((sum, r) => sum + r.amount, 0).toFixed(2));
   const totalDays = displayData.reduce((sum, r) => sum + r.days, 0);
 
   const deptList = departments && departments.length > 0 

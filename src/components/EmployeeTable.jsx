@@ -2,6 +2,7 @@ import { RiCalendarEventLine } from 'react-icons/ri';
 import { RiEditLine } from 'react-icons/ri';
 import { RiDeleteBinLine } from 'react-icons/ri';
 import { RiMoneyDollarCircleLine } from 'react-icons/ri';
+import { calculateShiftPay } from '../utils/salaryCalculator';
 
 function EmployeeTable({
   employees,
@@ -32,25 +33,15 @@ function EmployeeTable({
       const dailyRate = monthlySalary / 26;
       total = unpaidShifts.length * dailyRate;
     } else if (hourlyRate > 0) {
-      const otRate = emp.overtimeHourlyRate ? parseFloat(emp.overtimeHourlyRate) : hourlyRate;
+      const otRate = emp.overtimeHourlyRate ? parseFloat(emp.overtimeHourlyRate) : null;
       unpaidShifts.forEach(shift => {
-        const regHours = (shift.morningHours || 0) + (shift.afternoonHours || 0);
-        const otHours = shift.overtimeHours || 0;
-        let shiftPay = (regHours * hourlyRate) + (otHours * otRate);
-        
-        if (shift.isHoliday && shift.holidayType === 'regular') {
-          shiftPay += regHours * hourlyRate;
-        } else if (shift.isHoliday && shift.holidayType === 'special_non_working') {
-          shiftPay += regHours * hourlyRate * 0.3;
-        }
-        
-        total += shiftPay;
+        total += calculateShiftPay(shift, hourlyRate, otRate);
       });
     } else if (dailySalary > 0) {
       total = unpaidShifts.length * dailySalary;
     }
     
-    return total;
+    return parseFloat(total.toFixed(2));
   };
 
   const shouldShowRemainingSalary = (emp) => {
