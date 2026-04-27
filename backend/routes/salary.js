@@ -296,10 +296,14 @@ router.post('/pay', protect, async (req, res) => {
       return res.status(400).json({ message: 'No unpaid shifts found for the selected period' });
     } else if (hourlyRate > 0) {
       shifts.forEach(shift => {
-        const regularHours = (shift.morningHours || 0) + (shift.afternoonHours || 0);
-        const overtimeHours = shift.overtimeHours || 0;
-        const otRate = user.overtimeHourlyRate ? parseFloat(user.overtimeHourlyRate) : hourlyRate;
-        totalAmount += (regularHours * hourlyRate) + (overtimeHours * otRate);
+        const salaryData = calculateShiftSalary(
+          shift,
+          paymentType,
+          hourlyRate,
+          monthlySalary,
+          user.overtimeHourlyRate && parseFloat(user.overtimeHourlyRate)
+        );
+        totalAmount += salaryData.totalPay;
       });
     } else if (dailySalary > 0) {
       totalAmount = shifts.length * dailySalary;
@@ -443,10 +447,14 @@ router.get('/unpaid', protect, async (req, res) => {
       totalAmount = Math.max(baseAmount, salaryData.baseSalary) + salaryData.totalHolidayPremium + salaryData.overtimePay;
     } else if (hourlyRate > 0) {
       shifts.forEach(shift => {
-        const regularHours = (shift.morningHours || 0) + (shift.afternoonHours || 0);
-        const overtimeHours = shift.overtimeHours || 0;
-        const otRate = user.overtimeHourlyRate ? parseFloat(user.overtimeHourlyRate) : hourlyRate;
-        totalAmount += (regularHours * hourlyRate) + (overtimeHours * otRate);
+        const salaryData = calculateShiftSalary(
+          shift,
+          paymentType,
+          hourlyRate,
+          monthlySalary,
+          user.overtimeHourlyRate && parseFloat(user.overtimeHourlyRate)
+        );
+        totalAmount += salaryData.totalPay;
       });
     } else if (dailySalary > 0) {
       totalAmount = shifts.length * dailySalary;
