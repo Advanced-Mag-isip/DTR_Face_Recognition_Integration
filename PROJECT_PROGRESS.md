@@ -39,7 +39,8 @@ Implement the \"Salary Loop\" feature for the DTR system and transition the work
 - None. System is operational and stable.
 
 ## 📋 Future Enhancements (Backlog)
-- [ ] **Holiday Note UI**: Redesign the \"Note\" column in Payroll Report to handle holiday information more elegantly (e.g., as a tooltip or dedicated badge instead of raw text rendering).
+- [ ] **Monthly Holiday Verification**: Verify if monthly (output-based) employees should strictly receive only their fixed salary, or if they are entitled to holiday premiums on top of it. Current implementation adds premiums (+100%/+30%).
+- [ ] **Holiday Note UI**: Redesign the \"Note\" column in Payroll Report to handle holiday information more elegantly.
 
 
 ### Payroll & Cutoff Logic (Finalized)
