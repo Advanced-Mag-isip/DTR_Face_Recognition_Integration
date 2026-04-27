@@ -26,20 +26,18 @@ Implement the \"Salary Loop\" feature for the DTR system and transition the work
 - [x] **Step 10**: Fixed Monthly Salary Logic - Implemented logic for employees with fixed salaries (paid even with 0 shifts).
 - [x] **Step 11**: SalaryReport Enhancements - Added Paid Status, Payment Method, and Remaining Balance display.
 - [x] **Step 12**: UI Polish - Fixed dropdown icon spacing and standardized layout across all components.
+## ✅ Completed Steps
+...
 - [x] **Step 13**: Production Readiness - Fixed `server.js` catch-all route and created `deploy.sh` script.
+- [x] **Step 14**: Production Transition - Migrated database schema and successfully deployed via Git/PM2. System is now LIVE and fully functional.
 
 ## 🚧 In Progress
-- **Production Transition**: User confirmed all employees have `hourlyRate`. Manual SQL migration prepared for Cloud Panel execution.
+- None. System is operational and stable.
 
-## 📋 Pending Steps (Next Session)
-1. **Database Migration**: 
-   - Execute the **Master SQL Patch** below in the VPS Cloud Panel (phpMyAdmin).
-2. **Production Code Deployment**:
-   - Run `chmod +x deploy.sh` on VPS.
-   - Run `./deploy.sh` to pull changes, build frontend, and restart PM2.
-3. **Validation**: Verify that employees with `dailySalary` have been successfully migrated to `hourlyRate`.
+## 📋 Future Enhancements (Backlog)
+- [ ] **Holiday Note UI**: Redesign the "Note" column in Payroll Report to handle holiday information more elegantly (e.g., as a tooltip or dedicated badge instead of raw text rendering).
 
-## 🗄️ Master SQL Patch (Run this in phpMyAdmin)
+
 ```sql
 -- 1. CLEAN UP REDUNDANT INDEXES (Users)
 ALTER TABLE `Users` DROP INDEX `employeeId_2`, DROP INDEX `employeeId_3`, DROP INDEX `employeeId_4`, DROP INDEX `employeeId_5`, DROP INDEX `employeeId_6`, DROP INDEX `employeeId_7`, DROP INDEX `employeeId_8`, DROP INDEX `employeeId_9`, DROP INDEX `employeeId_10`, DROP INDEX `employeeId_11`, DROP INDEX `employeeId_12`, DROP INDEX `employeeId_13`, DROP INDEX `employeeId_14`, DROP INDEX `employeeId_15`, DROP INDEX `employeeId_16`, DROP INDEX `employeeId_17`, DROP INDEX `employeeId_18`, DROP INDEX `employeeId_19`, DROP INDEX `employeeId_20`, DROP INDEX `employeeId_21`, DROP INDEX `employeeId_22`, DROP INDEX `employeeId_23`, DROP INDEX `employeeId_24`, DROP INDEX `employeeId_25`, DROP INDEX `employeeId_26`, DROP INDEX `employeeId_27`, DROP INDEX `employeeId_28`, DROP INDEX `employeeId_29`, DROP INDEX `employeeId_30`, DROP INDEX `employeeId_31`, DROP INDEX `employeeId_32`, DROP INDEX `employeeId_33`, DROP INDEX `employeeId_34`, DROP INDEX `employeeId_35`, DROP INDEX `employeeId_36`, DROP INDEX `employeeId_37`, DROP INDEX `employeeId_38`, DROP INDEX `employeeId_39`, DROP INDEX `employeeId_40`, DROP INDEX `employeeId_41`, DROP INDEX `employeeId_42`, DROP INDEX `employeeId_43`, DROP INDEX `employeeId_44`, DROP INDEX `employeeId_45`, DROP INDEX `employeeId_46`, DROP INDEX `employeeId_47`, DROP INDEX `employeeId_48`, DROP INDEX `employeeId_49`, DROP INDEX `employeeId_50`, DROP INDEX `employeeId_51`, DROP INDEX `employeeId_52`, DROP INDEX `employeeId_53`, DROP INDEX `employeeId_54`, DROP INDEX `employeeId_55`, DROP INDEX `employeeId_56`, DROP INDEX `employeeId_57`, DROP INDEX `employeeId_58`, DROP INDEX `employeeId_59`, DROP INDEX `employeeId_60`, DROP INDEX `employeeId_61`, DROP INDEX `employeeId_62`;

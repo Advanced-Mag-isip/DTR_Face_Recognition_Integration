@@ -115,15 +115,14 @@ function PayrollReport({ employees, shifts, departments = [] }) {
             amount: amount,
             status: paidShifts.length === daysWorked && daysWorked > 0 ? 'PAID' : unpaidShifts.length > 0 ? 'UNPAID' : '-',
             note: (() => {
-              let savedNotes = {};
-              try {
-                if (emp.payrollNotes) {
-                  savedNotes = typeof emp.payrollNotes === 'string' ? JSON.parse(emp.payrollNotes) : emp.payrollNotes;
-                }
-              } catch (e) { savedNotes = {}; }
-              return savedNotes[`${selectedCycle}-${selectedMonth}`] || holidayNote || (overtimeHours > 0 ? `${overtimeHours} OT hours` : '');
-            })()
-          };
+            let savedNotes = {};
+            try {
+              if (emp.payrollNotes) {
+                savedNotes = typeof emp.payrollNotes === 'string' ? JSON.parse(emp.payrollNotes) : emp.payrollNotes;
+              }
+            } catch (e) { savedNotes = {}; }
+            return savedNotes[`${selectedCycle}-${selectedMonth}`] || (overtimeHours > 0 ? `${overtimeHours} OT hours` : '');
+            })()          };
         })
         .filter(r => r.days > 0);
 
@@ -184,7 +183,7 @@ function PayrollReport({ employees, shifts, departments = [] }) {
             adjustments: '',
             amount: totalAmount,
             status: isPaidNote ? 'PAID' : 'UNPAID',
-            note: savedNotes[noteKey] || holidayNote || (overtimeHours > 0 ? `${overtimeHours} OT hours` : '')
+            note: savedNotes[noteKey] || (overtimeHours > 0 ? `${overtimeHours} OT hours` : '')
           };
         });
       
