@@ -32,11 +32,19 @@ function EmployeeTable({
       const dailyRate = monthlySalary / 26;
       total = unpaidShifts.length * dailyRate;
     } else if (hourlyRate > 0) {
+      const otRate = emp.overtimeHourlyRate ? parseFloat(emp.overtimeHourlyRate) : hourlyRate;
       unpaidShifts.forEach(shift => {
         const regHours = (shift.morningHours || 0) + (shift.afternoonHours || 0);
         const otHours = shift.overtimeHours || 0;
-        const otRate = emp.overtimeHourlyRate ? parseFloat(emp.overtimeHourlyRate) : hourlyRate;
-        total += (regHours * hourlyRate) + (otHours * otRate);
+        let shiftPay = (regHours * hourlyRate) + (otHours * otRate);
+        
+        if (shift.isHoliday && shift.holidayType === 'regular') {
+          shiftPay += regHours * hourlyRate;
+        } else if (shift.isHoliday && shift.holidayType === 'special_non_working') {
+          shiftPay += regHours * hourlyRate * 0.3;
+        }
+        
+        total += shiftPay;
       });
     } else if (dailySalary > 0) {
       total = unpaidShifts.length * dailySalary;

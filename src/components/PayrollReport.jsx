@@ -99,7 +99,15 @@ function PayrollReport({ employees, shifts, departments = [] }) {
             } else if (hourlyRate > 0) {
               const regHours = (shift.morningHours || 0) + (shift.afternoonHours || 0);
               const otHours = shift.overtimeHours || 0;
-              amount += (regHours * hourlyRate) + (otHours * overtimeHourlyRate);
+              let shiftPay = (regHours * hourlyRate) + (otHours * overtimeHourlyRate);
+              
+              if (shift.isHoliday && shift.holidayType === 'regular') {
+                shiftPay += regHours * hourlyRate;
+              } else if (shift.isHoliday && shift.holidayType === 'special_non_working') {
+                shiftPay += regHours * hourlyRate * 0.3;
+              }
+              
+              amount += shiftPay;
             }
           });
           
@@ -107,7 +115,7 @@ function PayrollReport({ employees, shifts, departments = [] }) {
             id: emp.id,
             name: emp.firstName && emp.lastName ? `${emp.firstName} ${emp.lastName}` : emp.employeeId,
             department: emp.department || '-',
-            rate: dailySalary > 0 ? `${dailySalary}/day` : hourlyRate > 0 ? `${hourlyRate}/hr` : '-',
+            rate: hourlyRate > 0 ? `${hourlyRate}/hr` : '-',
             paymentDetails: emp.paymentDetails || emp.paymentMethod || '-',
             days: daysWorked,
             paidDays: paidShifts.length,
