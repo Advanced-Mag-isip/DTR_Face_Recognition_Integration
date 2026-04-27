@@ -95,21 +95,41 @@ function PaySalaryModal({ isOpen, onClose, employees, lockedEmployee }) {
     if (!unpaidData || selectedShiftIds.length === 0) return 0;
 
     const { employee } = unpaidData;
-    const { paymentType, hourlyRate, monthlySalary, dailySalary } = employee;
+    const { paymentType, hourlyRate, monthlySalary, overtimeHourlyRate } = employee;
     const selectedShifts = unpaidData.shifts.filter(s => selectedShiftIds.includes(s.id));
 
     let total = 0;
+    
     if (paymentType === 'monthly' && monthlySalary > 0) {
-      total = selectedShifts.length * (monthlySalary / 26);
+      // Monthly employees receive monthly salary portion + OT/Holiday premiums
+      const baseAmount = (monthlySalary / 2); // Simple split for period
+      total = baseAmount;
+      
+      selectedShifts.forEach(shift => {
+        const regHours = (shift.morningHours || 0) + (shift.afternoonHours || 0);
+        const otHours = shift.overtimeHours || 0;
+        const otRate = overtimeHourlyRate ? parseFloat(overtimeHourlyRate) : (monthlySalary / 26 / 8);
+        const holidayMultiplier = shift.holidayType === 'regular' ? 2.0 : shift.holidayType === 'special_non_working' ? 1.3 : 1.0;
+        
+        const basePay = regHours * (monthlySalary / 26 / 8);
+        const holidayPremium = basePay * (holidayMultiplier - 1);
+        const overtimePay = otHours * otRate;
+        
+        total += holidayPremium + overtimePay;
+      });
     } else if (hourlyRate > 0) {
       selectedShifts.forEach(shift => {
-        const regularHours = (shift.morningHours || 0) + (shift.afternoonHours || 0);
-        const overtimeHours = shift.overtimeHours || 0;
-        const otRate = employee.overtimeHourlyRate ? parseFloat(employee.overtimeHourlyRate) : hourlyRate;
-        total += (regularHours * hourlyRate) + (overtimeHours * otRate);
+        const regHours = (shift.morningHours || 0) + (shift.afternoonHours || 0);
+        const otHours = shift.overtimeHours || 0;
+        const otRate = overtimeHourlyRate ? parseFloat(overtimeHourlyRate) : hourlyRate;
+        const holidayMultiplier = shift.holidayType === 'regular' ? 2.0 : shift.holidayType === 'special_non_working' ? 1.3 : 1.0;
+        
+        const basePay = regHours * hourlyRate;
+        const holidayPremium = basePay * (holidayMultiplier - 1);
+        const overtimePay = otHours * otRate;
+        
+        total += basePay + holidayPremium + overtimePay;
       });
-    } else if (dailySalary > 0) {
-      total = selectedShifts.length * dailySalary;
     }
 
     return total;
