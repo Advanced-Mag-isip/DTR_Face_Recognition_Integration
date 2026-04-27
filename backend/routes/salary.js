@@ -3,7 +3,7 @@ const router = express.Router();
 const { Op } = require('sequelize');
 const Shift = require('../models/Shift');
 const User = require('../models/User');
-const { calculateMonthlySalary } = require('../utils/salaryCalculator');
+const { calculateMonthlySalary, calculateShiftSalary } = require('../utils/salaryCalculator');
 const { protect } = require('../middleware/authMiddleware');
 
 /**
