@@ -19,6 +19,18 @@ function PayrollReport({ employees, shifts, departments = [] }) {
     setSelectedMonth(`${year}-${month}`);
   }, []);
 
+  const getFridaysInMonth = (year, monthNum) => {
+    const fridays = [];
+    const daysInMonth = new Date(year, monthNum, 0).getDate();
+    for (let day = 1; day <= daysInMonth; day++) {
+      const date = new Date(year, monthNum - 1, day);
+      if (date.getDay() === 5) { // Friday = 5
+        fridays.push(date);
+      }
+    }
+    return fridays;
+  };
+
   const getCycleDates = (cycle, month) => {
     if (!month || !month.includes('-')) {
       const now = new Date();
@@ -30,20 +42,25 @@ function PayrollReport({ employees, shifts, departments = [] }) {
     const [year, monthNum] = month.split('-').map(Number);
     const monthStart = new Date(year, monthNum - 1, 1);
     const monthEnd = new Date(year, monthNum, 0);
+    const fridays = getFridaysInMonth(year, monthNum);
     
     if (cycle === 'first') {
+      // 1st Cut-off: Every Friday of 2nd week (2nd Friday of the month)
+      const secondFriday = fridays[1] || fridays[0];
       return {
         label: `PAYROLL (FIRST HALF)`,
         subtitle: `${monthStart.toLocaleDateString('en-PH', { month: 'long', year: 'numeric' })} - Paid every Friday of 2nd week`,
         startDate: monthStart.toISOString().split('T')[0],
-        endDate: new Date(year, monthNum - 1, 15).toISOString().split('T')[0]
+        endDate: secondFriday ? secondFriday.toISOString().split('T')[0] : new Date(year, monthNum - 1, 15).toISOString().split('T')[0]
       };
     } else if (cycle === 'second') {
+      // 2nd Cut-off: Every last Friday of the month
+      const lastFriday = fridays[fridays.length - 1] || fridays[0];
       return {
         label: `PAYROLL (SECOND HALF)`,
         subtitle: `${monthStart.toLocaleDateString('en-PH', { month: 'long', year: 'numeric' })} - Paid every last Friday`,
         startDate: new Date(year, monthNum - 1, 16).toISOString().split('T')[0],
-        endDate: monthEnd.toISOString().split('T')[0]
+        endDate: lastFriday ? lastFriday.toISOString().split('T')[0] : monthEnd.toISOString().split('T')[0]
       };
     } else {
       return {

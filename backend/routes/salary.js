@@ -377,18 +377,34 @@ router.get('/unpaid', protect, async (req, res) => {
       return res.status(404).json({ message: 'Employee not found' });
     }
 
+    // Helper to get Fridays in a month
+    const getFridaysInMonth = (year, monthNum) => {
+      const fridays = [];
+      const daysInMonth = new Date(year, monthNum, 0).getDate();
+      for (let day = 1; day <= daysInMonth; day++) {
+        const date = new Date(year, monthNum - 1, day);
+        if (date.getDay() === 5) { // Friday = 5
+          fridays.push(date);
+        }
+      }
+      return fridays;
+    };
+
     let whereClause = { employeeId: targetId, isPaid: false };
 
     if (month) {
       const [year, monthNum] = month.split('-').map(Number);
       const monthStart = new Date(year, monthNum - 1, 1);
       const monthEnd = new Date(year, monthNum, 0);
+      const fridays = getFridaysInMonth(year, monthNum);
+      const secondFriday = fridays[1] || fridays[0];
+      const lastFriday = fridays[fridays.length - 1] || fridays[0];
 
       if (payPeriod === 'first') {
         whereClause.date = {
           [Op.between]: [
             monthStart.toISOString().split('T')[0],
-            new Date(year, monthNum - 1, 15).toISOString().split('T')[0]
+            secondFriday ? secondFriday.toISOString().split('T')[0] : new Date(year, monthNum - 1, 15).toISOString().split('T')[0]
           ]
         };
       } else if (payPeriod === 'monthly') {
@@ -402,7 +418,7 @@ router.get('/unpaid', protect, async (req, res) => {
         whereClause.date = {
           [Op.between]: [
             new Date(year, monthNum - 1, 16).toISOString().split('T')[0],
-            monthEnd.toISOString().split('T')[0]
+            lastFriday ? lastFriday.toISOString().split('T')[0] : monthEnd.toISOString().split('T')[0]
           ]
         };
       } else {
