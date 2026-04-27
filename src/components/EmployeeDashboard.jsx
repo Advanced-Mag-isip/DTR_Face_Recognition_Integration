@@ -6,7 +6,6 @@ import Topbar from './Topbar';
 import TableControls from './TableControls';
 import ShiftTable from './ShiftTable';
 import AddShiftModal from './AddShiftModal';
-import StatsCards from './StatsCards';
 import SalaryReport from './SalaryReport';
 import DeleteConfirmationModal from './DeleteConfirmationModal';
 
@@ -128,8 +127,6 @@ function EmployeeDashboard() {
 
       <div className="p-6 flex justify-center">
         <div className="w-full max-w-5xl">
-          <StatsCards data={filteredData} />
-
           {!loadingSalary && salaryData && (
             <div className="mt-6">
               <SalaryReport

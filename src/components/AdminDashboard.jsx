@@ -16,7 +16,6 @@ import { getDepartments } from '../utils/departmentApi';
 import SettingsModal from './SettingsModal';
 import AddShiftModal from './AddShiftModal';
 import ShiftTable from './ShiftTable';
-import StatsCards from './StatsCards';
 import SalaryReport from './SalaryReport';
 import MonthPicker from './MonthPicker';
 import SortDropdown from './SortDropdown';
@@ -486,8 +485,6 @@ function AdminDashboard() {
                   Add Shift
                 </button>
               </div>
-
-              <StatsCards data={getEmployeeShifts(selectedEmployee.id)} />
 
               {(selectedEmployee.dailySalary > 0 || selectedEmployee.hourlyRate > 0 || selectedEmployee.monthlySalary > 0) && (
                 <div className="mt-8">
