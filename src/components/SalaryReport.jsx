@@ -146,25 +146,43 @@ function SalaryReport({ dailySalary, overtimeHourlyRate, shifts, employeeId, pay
         unpaidAmount: isPaid ? 0 : salaryData.grossPay
       };
     } else {
-      // For hourly, check each shift
+      // For hourly, calculate each shift's actual salary (including holiday premiums)
+      const hourlyRateValue = salaryData.hourlyRate || 0;
+      const otRateValue = salaryData.overtimeRate || hourlyRateValue || 0;
+
+      const calculateShiftSalary = (shift) => {
+        const regHours = (shift.morningHours || 0) + (shift.afternoonHours || 0);
+        const otHours = shift.overtimeHours || 0;
+        let shiftPay = (regHours * hourlyRateValue) + (otHours * otRateValue);
+
+        if (shift.isHoliday && shift.holidayType === 'regular') {
+          shiftPay += regHours * hourlyRateValue;
+        } else if (shift.isHoliday && shift.holidayType === 'special_non_working') {
+          shiftPay += regHours * hourlyRateValue * 0.3;
+        }
+
+        return parseFloat(shiftPay.toFixed(2));
+      };
+
       let paidAmount = 0;
       let unpaidAmount = 0;
-      
-      // Note: This is an approximation since we don't have per-shift pay here easily
-      // but we can estimate based on ratio of paid shifts
+
+      shifts.forEach(shift => {
+        const shiftSalary = calculateShiftSalary(shift);
+        if (shift.isPaid) {
+          paidAmount += shiftSalary;
+        } else {
+          unpaidAmount += shiftSalary;
+        }
+      });
+
       const totalShifts = shifts.length;
       const paidShifts = shifts.filter(s => s.isPaid).length;
-      
-      if (totalShifts === 0) return { status: '-', paidAmount: 0, unpaidAmount: 0 };
-      
-      const ratio = paidShifts / totalShifts;
-      paidAmount = salaryData.grossPay * ratio;
-      unpaidAmount = salaryData.grossPay * (1 - ratio);
-      
+
       return {
         status: paidShifts === totalShifts ? 'PAID' : paidShifts > 0 ? 'PARTIAL' : 'UNPAID',
-        paidAmount,
-        unpaidAmount
+        paidAmount: parseFloat(paidAmount.toFixed(2)),
+        unpaidAmount: parseFloat(unpaidAmount.toFixed(2))
       };
     }
   };
