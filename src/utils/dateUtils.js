@@ -1,4 +1,17 @@
 /**
+ * Format date to YYYY-MM-DD in local time
+ * @param {Date|string} date - Date object or string
+ * @returns {string} Formatted date string
+ */
+export const formatDate = (date) => {
+  const d = typeof date === 'string' ? new Date(date) : date;
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+/**
  * Get the start and end date of the current month
  * @returns {Object} Object with startDate and endDate in YYYY-MM-DD format
  */
@@ -7,8 +20,8 @@ export const getCurrentMonthRange = () => {
   const year = now.getFullYear();
   const month = now.getMonth();
   
-  const startDate = new Date(year, month, 1).toISOString().split('T')[0];
-  const endDate = new Date(year, month + 1, 0).toISOString().split('T')[0];
+  const startDate = formatDate(new Date(year, month, 1));
+  const endDate = formatDate(new Date(year, month + 1, 0));
   
   return { startDate, endDate };
 };
@@ -21,23 +34,28 @@ export const getCurrentMonthRange = () => {
 export const getMonthRange = (monthStr) => {
   const [year, month] = monthStr.split('-').map(Number);
   
-  const startDate = new Date(year, month - 1, 1).toISOString().split('T')[0];
-  const endDate = new Date(year, month, 0).toISOString().split('T')[0];
+  const startDate = formatDate(new Date(year, month - 1, 1));
+  const endDate = formatDate(new Date(year, month, 0));
   
   return { startDate, endDate };
 };
 
 /**
- * Format date to YYYY-MM-DD
- * @param {Date|string} date - Date object or string
- * @returns {string} Formatted date string
+ * Get all Fridays in a given month
+ * @param {number} year - The year
+ * @param {number} monthNum - The month (1-12)
+ * @returns {Date[]} Array of Date objects representing Fridays
  */
-export const formatDate = (date) => {
-  const d = typeof date === 'string' ? new Date(date) : date;
-  const year = d.getFullYear();
-  const month = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
+export const getFridaysInMonth = (year, monthNum) => {
+  const fridays = [];
+  const lastDay = new Date(year, monthNum, 0).getDate();
+  for (let day = 1; day <= lastDay; day++) {
+    const date = new Date(year, monthNum - 1, day);
+    if (date.getDay() === 5) { // Friday = 5
+      fridays.push(new Date(date));
+    }
+  }
+  return fridays;
 };
 
 /**

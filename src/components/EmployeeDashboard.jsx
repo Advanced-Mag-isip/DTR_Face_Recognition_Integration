@@ -43,7 +43,7 @@ function EmployeeDashboard() {
         .finally(() => setLoadingShifts(false)),
       getCurrentMonthSalary()
         .then((data) => {
-          console.log('Salary data loaded:', data);
+          
           setSalaryData(data);
         })
         .catch((err) => {
@@ -86,10 +86,10 @@ function EmployeeDashboard() {
         setEditingshift(null);
       } else {
         const newShift = await addShift(shiftData);
-        console.log('New shift added:', newShift);
+        
         // Refresh shifts from API to ensure data is in sync
         const updatedShifts = await getShifts();
-        console.log('Refreshed shifts:', updatedShifts);
+        
         setShifts(updatedShifts);
         setShowAddModal(false);
       }

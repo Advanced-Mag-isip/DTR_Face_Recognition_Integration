@@ -21,11 +21,11 @@ function PayrollReport({ employees, shifts, departments = [] }) {
 
   const getFridaysInMonth = (year, monthNum) => {
     const fridays = [];
-    const daysInMonth = new Date(year, monthNum, 0).getDate();
-    for (let day = 1; day <= daysInMonth; day++) {
+    const lastDay = new Date(year, monthNum, 0).getDate();
+    for (let day = 1; day <= lastDay; day++) {
       const date = new Date(year, monthNum - 1, day);
       if (date.getDay() === 5) { // Friday = 5
-        fridays.push(date);
+        fridays.push(new Date(date));
       }
     }
     return fridays;
@@ -43,31 +43,55 @@ function PayrollReport({ employees, shifts, departments = [] }) {
     const monthStart = new Date(year, monthNum - 1, 1);
     const monthEnd = new Date(year, monthNum, 0);
     const fridays = getFridaysInMonth(year, monthNum);
+
+    // Helper to get last Friday of previous month
+    const getLastFridayOfPrevMonth = (y, m) => {
+      const d = new Date(y, m - 1, 0); // Last day of prev month
+      while (d.getDay() !== 5) {
+        d.setDate(d.getDate() - 1);
+      }
+      return new Date(d);
+    };
+    
+    const formatDate = (date) => {
+      const y = date.getFullYear();
+      const m = String(date.getMonth() + 1).padStart(2, '0');
+      const d = String(date.getDate()).padStart(2, '0');
+      return `${y}-${m}-${d}`;
+    };
     
     if (cycle === 'first') {
-      // 1st Cut-off: Every Friday of 2nd week (2nd Friday of the month)
+      const prevLastFriday = getLastFridayOfPrevMonth(year, monthNum);
+      const startDate = new Date(prevLastFriday);
+      startDate.setDate(startDate.getDate() + 1);
+      
       const secondFriday = fridays[1] || fridays[0];
+      
       return {
         label: `PAYROLL (FIRST HALF)`,
-        subtitle: `${monthStart.toLocaleDateString('en-PH', { month: 'long', year: 'numeric' })} - Paid every Friday of 2nd week`,
-        startDate: monthStart.toISOString().split('T')[0],
-        endDate: secondFriday ? secondFriday.toISOString().split('T')[0] : new Date(year, monthNum - 1, 15).toISOString().split('T')[0]
+        subtitle: `${monthStart.toLocaleDateString('en-PH', { month: 'long', year: 'numeric' })} - Ends ${secondFriday ? secondFriday.toLocaleDateString() : '2nd Friday'}`,
+        startDate: formatDate(startDate),
+        endDate: secondFriday ? formatDate(secondFriday) : formatDate(new Date(year, monthNum - 1, 15))
       };
     } else if (cycle === 'second') {
-      // 2nd Cut-off: Every last Friday of the month
+      const secondFriday = fridays[1] || fridays[0];
+      const startDate = new Date(secondFriday);
+      startDate.setDate(startDate.getDate() + 1);
+      
       const lastFriday = fridays[fridays.length - 1] || fridays[0];
+      
       return {
         label: `PAYROLL (SECOND HALF)`,
-        subtitle: `${monthStart.toLocaleDateString('en-PH', { month: 'long', year: 'numeric' })} - Paid every last Friday`,
-        startDate: new Date(year, monthNum - 1, 16).toISOString().split('T')[0],
-        endDate: lastFriday ? lastFriday.toISOString().split('T')[0] : monthEnd.toISOString().split('T')[0]
+        subtitle: `${monthStart.toLocaleDateString('en-PH', { month: 'long', year: 'numeric' })} - Ends ${lastFriday ? lastFriday.toLocaleDateString() : 'Last Friday'}`,
+        startDate: formatDate(startDate),
+        endDate: lastFriday ? formatDate(lastFriday) : formatDate(monthEnd)
       };
     } else {
       return {
         label: `PAYROLL - MONTHLY`,
         subtitle: `${monthStart.toLocaleDateString('en-PH', { month: 'long', year: 'numeric' })} - Monthly Rate`,
-        startDate: monthStart.toISOString().split('T')[0],
-        endDate: monthEnd.toISOString().split('T')[0]
+        startDate: formatDate(monthStart),
+        endDate: formatDate(monthEnd)
       };
     }
   };
@@ -89,13 +113,14 @@ function PayrollReport({ employees, shifts, departments = [] }) {
         .map(emp => {
           const empShifts = shifts.filter(s => 
             s.employeeId === emp.id && 
-            s.date >= startDate && 
-            s.date <= endDate
+            s.date <= endDate &&
+            (s.date >= startDate || !s.isPaid)
           );
           
           const dailySalary = parseFloat(emp.dailySalary) || 0;
           const hourlyRate = parseFloat(emp.hourlyRate) || 0;
-          const overtimeHourlyRate = parseFloat(emp.overtimeHourlyRate) || hourlyRate;
+          const effectiveHourlyRate = hourlyRate > 0 ? hourlyRate : (dailySalary / 8);
+          const overtimeHourlyRate = parseFloat(emp.overtimeHourlyRate) || (effectiveHourlyRate * 1.25);
           
           const daysWorked = empShifts.length;
           const paidShifts = empShifts.filter(s => s.isPaid);
@@ -103,20 +128,6 @@ function PayrollReport({ employees, shifts, departments = [] }) {
           let amount = 0;
           let overtimeHours = 0;
           let holidayNote = '';
-          
-          // Debug logging
-          console.log('=== PayrollReport Debug ===');
-          console.log('Employee:', emp.firstName, emp.lastName, '(' + emp.employeeId + ')');
-          console.log('Pay Cycle:', selectedCycle, '| Month:', selectedMonth);
-          console.log('Date Range:', startDate, 'to', endDate);
-          console.log('Shift Prop Length:', shifts.length);
-          console.log('Filtered Shifts for Employee:', empShifts.length);
-          if (empShifts.length > 0) {
-            console.log('Shift Dates from Prop:', empShifts.map(s => s.date).sort());
-          }
-          console.log('Hourly Rate:', hourlyRate);
-          console.log('=====================');
-          // End debug
           
           const holidayShifts = empShifts.filter(s => s.isHoliday);
           if (holidayShifts.length > 0) {
@@ -126,18 +137,14 @@ function PayrollReport({ employees, shifts, departments = [] }) {
           
           empShifts.forEach(shift => {
             overtimeHours += shift.overtimeHours || 0;
-            if (dailySalary > 0) {
-              amount += dailySalary;
-            } else if (hourlyRate > 0) {
-              amount += calculateShiftPay(shift, hourlyRate, overtimeHourlyRate);
-            }
+            amount += calculateShiftPay(shift, effectiveHourlyRate, overtimeHourlyRate);
           });
           
           return {
             id: emp.id,
             name: emp.firstName && emp.lastName ? `${emp.firstName} ${emp.lastName}` : emp.employeeId,
             department: emp.department || '-',
-            rate: hourlyRate > 0 ? `${hourlyRate}/hr` : '-',
+            rate: hourlyRate > 0 ? `${hourlyRate}/hr` : (dailySalary > 0 ? `${dailySalary}/day` : '-'),
             paymentDetails: emp.paymentDetails || emp.paymentMethod || '-',
             days: daysWorked,
             paidDays: paidShifts.length,
@@ -160,9 +167,24 @@ function PayrollReport({ employees, shifts, departments = [] }) {
         .filter(emp => emp.isActive !== false && emp.paymentType === 'monthly')
         .map(emp => {
           const monthlySalary = parseFloat(emp.monthlySalary) || 0;
+          
+          // Monthly employees are paid ONLY on the 2nd Cut-off or Monthly report
+          if (selectedCycle === 'first') {
+            return {
+              id: emp.id,
+              name: emp.firstName && emp.lastName ? `${emp.firstName} ${emp.lastName}` : emp.employeeId,
+              department: emp.department || '-',
+              rate: `${monthlySalary.toLocaleString()}/month`,
+              paymentDetails: emp.paymentDetails || emp.paymentMethod || '-',
+              adjustments: '',
+              amount: 0,
+              status: '-',
+              note: 'Paid at 2nd Cut-off'
+            };
+          }
+
           const empShifts = shifts.filter(s => 
             s.employeeId === emp.id && 
-            s.date >= startDate && 
             s.date <= endDate
           );
           
@@ -181,19 +203,22 @@ function PayrollReport({ employees, shifts, departments = [] }) {
               const multiplier = shift.holidayType === 'regular' ? 1.0 : 
                                 shift.holidayType === 'special_non_working' ? 0.3 : 0;
               const regHours = (shift.morningHours || 0) + (shift.afternoonHours || 0);
+              // For monthly employees, only add the EXTRA premium, as base is already in monthlySalary
               holidayPremium += (regHours * hourlyRate) * multiplier;
+              
+              if (shift.holidayName && !holidayNote.includes(shift.holidayName)) {
+                holidayNote = holidayNote ? `${holidayNote}, ${shift.holidayName}` : shift.holidayName;
+              }
             }
           });
           
-          const holidayShifts = empShifts.filter(s => s.isHoliday);
-          if (holidayShifts.length > 0) {
-            const holidays = [...new Set(holidayShifts.map(s => s.holidayName))];
-            holidayNote = holidays.join(', ');
-          }
-          
+          console.log(`%c[DEBUG Report Details] ${emp.firstName}: Found ${empShifts.length} shifts. OT Hours: ${overtimeHours}, Holiday Premium: ${holidayPremium}`, "color: white; background: navy; padding: 2px;");
+
           const overtimePay = overtimeHours * overtimeHourlyRate;
           const totalAmount = parseFloat((monthlySalary + overtimePay + holidayPremium).toFixed(2));
           
+          console.log(`%c[DEBUG Report] ${emp.firstName}: Base=${monthlySalary}, OT=${overtimePay}, Holiday=${holidayPremium}, Total=${totalAmount}`, "color: white; background: blue; font-weight: bold; padding: 2px 4px; border-radius: 2px;");
+
           let savedNotes = {};
           try {
             if (emp.payrollNotes) {
@@ -201,19 +226,20 @@ function PayrollReport({ employees, shifts, departments = [] }) {
             }
           } catch (e) { savedNotes = {}; }
           
-          const noteKey = `monthly-${selectedMonth}`;
+          const noteKey = `${selectedCycle}-${selectedMonth}`;
           const isPaidNote = savedNotes[noteKey] === 'PAID';
+          const allShiftsPaid = empShifts.length > 0 && empShifts.every(s => s.isPaid);
           
           return {
             id: emp.id,
             name: emp.firstName && emp.lastName ? `${emp.firstName} ${emp.lastName}` : emp.employeeId,
             department: emp.department || '-',
-            rate: monthlySalary > 0 ? `${monthlySalary.toLocaleString()}/month` : '-',
+            rate: `${monthlySalary.toLocaleString()}/month`,
             paymentDetails: emp.paymentDetails || emp.paymentMethod || '-',
             adjustments: '',
             amount: totalAmount,
-            status: isPaidNote ? 'PAID' : 'UNPAID',
-            note: savedNotes[noteKey] || (overtimeHours > 0 ? `${overtimeHours} OT hours` : '')
+            status: (isPaidNote || allShiftsPaid) ? 'PAID' : 'UNPAID',
+            note: savedNotes[noteKey] || (holidayNote ? `${holidayNote}${overtimeHours > 0 ? ' + OT' : ''}` : overtimeHours > 0 ? `${overtimeHours} OT hours` : '')
           };
         });
       
@@ -302,8 +328,8 @@ function PayrollReport({ employees, shifts, departments = [] }) {
   };
 
   const cycleButtons = [
-    { key: 'first', label: '1st Half', desc: 'Days 1-15' },
-    { key: 'second', label: '2nd Half', desc: 'Days 16-End' },
+    { key: 'first', label: '1st Half', desc: '1st - 2nd Friday' },
+    { key: 'second', label: '2nd Half', desc: 'Post 2nd Friday' },
     { key: 'monthly', label: 'Monthly', desc: 'Full Month' }
   ];
 

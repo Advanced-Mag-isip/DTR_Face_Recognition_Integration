@@ -104,7 +104,7 @@ function AdminDashboard() {
         .finally(() => setLoadingShifts(false)),
       getDepartments()
         .then((data) => {
-          console.log('Departments loaded:', data);
+          
           setDepartments(data);
         })
         .catch(console.error)
@@ -230,10 +230,10 @@ function AdminDashboard() {
         setEditingShift(null);
       } else {
         const newShift = await addShift(savedShift);
-        console.log('New shift added:', newShift);
+        
         // Refresh shifts from API to ensure data is in sync
         const updatedShifts = await getShifts();
-        console.log('Refreshed shifts:', updatedShifts);
+        
         setShifts(updatedShifts);
         setShowAddShiftModal(false);
         setEditingShift(null);

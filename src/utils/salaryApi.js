@@ -48,15 +48,17 @@ export const getUnpaidShifts = async (employeeId, payPeriod, month) => {
  * @param {string} payload.payPeriod - 'first' or 'second' cut-off
  * @param {string} payload.startDate - Start date (optional)
  * @param {string} payload.endDate - End date (optional)
+ * @param {string} payload.month - Month in YYYY-MM format (optional)
  * @returns {Promise<Object>} Payment result
  */
-export const payShifts = async ({ employeeId, shiftIds, payPeriod, startDate, endDate }) => {
+export const payShifts = async ({ employeeId, shiftIds, payPeriod, startDate, endDate, month }) => {
   const { data } = await api.post('/salary/pay', {
     employeeId,
     shiftIds,
     payPeriod,
     startDate,
-    endDate
+    endDate,
+    month
   });
   return data;
 };

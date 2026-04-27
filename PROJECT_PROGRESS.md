@@ -30,13 +30,26 @@ Implement the \"Salary Loop\" feature for the DTR system and transition the work
 ...
 - [x] **Step 13**: Production Readiness - Fixed `server.js` catch-all route and created `deploy.sh` script.
 - [x] **Step 14**: Production Transition - Migrated database schema and successfully deployed via Git/PM2. System is now LIVE and fully functional.
+- [x] **Step 15**: Payroll Synchronization - Fixed major discrepancies between Table, Modal, and Report views.
+- [x] **Step 16**: Date Logic Overhaul - Implemented rolling cutoffs and fixed timezone-related date shifts by removing `toISOString()`.
+- [x] **Step 17**: Holiday/OT Correction - Standardized premium calculations (+100% Regular, +30% Special) across all components for all employee types.
+- [x] **Step 18**: Global Balance Logic - Management Table now shows total outstanding debt (all unpaid shifts), while Modal/Report remain cutoff-specific.
 
 ## 🚧 In Progress
 - None. System is operational and stable.
 
 ## 📋 Future Enhancements (Backlog)
-- [ ] **Holiday Note UI**: Redesign the "Note" column in Payroll Report to handle holiday information more elegantly (e.g., as a tooltip or dedicated badge instead of raw text rendering).
+- [ ] **Holiday Note UI**: Redesign the \"Note\" column in Payroll Report to handle holiday information more elegantly (e.g., as a tooltip or dedicated badge instead of raw text rendering).
 
+
+### Payroll & Cutoff Logic (Finalized)
+- **Cutoff 1**: Up to the **2nd Friday** of the month.
+- **Cutoff 2**: Up to the **Last Friday** of the month.
+- **Rolling Logic (Modal/Report)**: Any unpaid shifts *before* the cutoff date are included in the payout.
+- **Global Balance (Management Table)**: Shows the sum of **ALL** unpaid shifts regardless of cutoff, providing a clear view of total company debt to employees.
+- **Monthly Employees**: Paid fixed base salary + premiums only at the 2nd Cutoff.
+- **Date Handling**: Strictly uses local time formatting to prevent timezone-based missing shifts.
+- **Calculations**: Standardized via `calculateShiftPay` utility.
 
 ```sql
 -- 1. CLEAN UP REDUNDANT INDEXES (Users)

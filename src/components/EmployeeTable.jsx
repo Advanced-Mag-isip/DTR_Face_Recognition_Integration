@@ -1,8 +1,6 @@
-import { RiCalendarEventLine } from 'react-icons/ri';
-import { RiEditLine } from 'react-icons/ri';
-import { RiDeleteBinLine } from 'react-icons/ri';
-import { RiMoneyDollarCircleLine } from 'react-icons/ri';
+import { RiCalendarEventLine, RiEditLine, RiDeleteBinLine, RiMoneyDollarCircleLine } from 'react-icons/ri';
 import { calculateShiftPay } from '../utils/salaryCalculator';
+import { getFridaysInMonth, formatDate } from '../utils/dateUtils';
 
 function EmployeeTable({
   employees,
@@ -15,56 +13,66 @@ function EmployeeTable({
   currentMonth
 }) {
   const calculateRemainingSalary = (emp) => {
-    if (!emp || !shifts || shifts.length === 0) return 0;
-    
-    const empShifts = shifts.filter(s => s.employeeId === emp.id);
-    if (empShifts.length === 0) return 0;
+    if (!emp) return 0;
     
     const paymentType = emp.paymentType || 'hourly';
     const hourlyRate = parseFloat(emp.hourlyRate) || 0;
     const monthlySalary = parseFloat(emp.monthlySalary) || 0;
     const dailySalary = parseFloat(emp.dailySalary) || 0;
+    const overtimeHourlyRate = parseFloat(emp.overtimeHourlyRate) || 0;
     
-    const unpaidShifts = empShifts.filter(s => !s.isPaid);
-    if (unpaidShifts.length === 0) return 0;
+    // Get ALL unpaid shifts for this employee (Global Balance)
+    const unpaidShifts = (shifts || []).filter(s => 
+      s.employeeId === emp.id && 
+      !s.isPaid
+    );
     
-    let total = 0;
-    if (paymentType === 'monthly' && monthlySalary > 0) {
-      const dailyRate = monthlySalary / 26;
-      total = unpaidShifts.length * dailyRate;
-    } else if (hourlyRate > 0) {
-      const otRate = emp.overtimeHourlyRate ? parseFloat(emp.overtimeHourlyRate) : null;
+    const isMonthly = paymentType === 'monthly' || monthlySalary > 0;
+    
+    if (isMonthly) {
+      // For monthly employees: Full Fixed Salary + Extras (OT/Holidays)
+      // We prioritize Monthly Salary if it's set (> 0)
+      const baseSalary = monthlySalary > 0 ? monthlySalary : (dailySalary * 26);
+      const baseHourlyRate = (baseSalary / 26) / 8;
+      
+      let overtimeTotal = 0;
+      let holidayPremiumTotal = 0;
+      
       unpaidShifts.forEach(shift => {
-        total += calculateShiftPay(shift, hourlyRate, otRate);
+        // OT portion
+        const otRate = overtimeHourlyRate || baseHourlyRate;
+        overtimeTotal += (shift.overtimeHours || 0) * otRate;
+        
+        // Holiday premium portion
+        if (shift.isHoliday) {
+          const regHours = (shift.morningHours || 0) + (shift.afternoonHours || 0);
+          const multiplier = shift.holidayType === 'regular' ? 1.0 : 
+                            shift.holidayType === 'special_non_working' ? 0.3 : 0;
+          holidayPremiumTotal += (regHours * baseHourlyRate * multiplier);
+        }
       });
-    } else if (dailySalary > 0) {
-      total = unpaidShifts.length * dailySalary;
+
+      const finalTotal = baseSalary + overtimeTotal + holidayPremiumTotal;
+      console.log(`%c[DEBUG Table] ${emp.firstName}: Base=${baseSalary}, OT=${overtimeTotal}, Holiday=${holidayPremiumTotal}, Total=${finalTotal}`, "color: white; background: darkorange; font-weight: bold; padding: 2px 4px; border-radius: 2px;");
+      return finalTotal;
+    } else {
+      // For hourly/daily employees: Sum of all unpaid shifts
+      if (unpaidShifts.length === 0) return 0;
+      
+      let total = 0;
+      const effectiveHourlyRate = hourlyRate > 0 ? hourlyRate : (dailySalary / 8);
+      const effectiveOtRate = overtimeHourlyRate || (effectiveHourlyRate * 1.25);
+
+      unpaidShifts.forEach(shift => {
+        total += calculateShiftPay(shift, effectiveHourlyRate, effectiveOtRate);
+      });
+      return parseFloat(total.toFixed(2));
     }
-    
-    return parseFloat(total.toFixed(2));
   };
 
   const shouldShowRemainingSalary = (emp) => {
-    if (!emp) return false;
-    if (emp.paymentType === 'hourly') return true;
-    
-    const paymentType = emp.paymentType || 'hourly';
-    if (paymentType !== 'monthly') return true;
-    
-    const now = new Date();
-    const lastFriday = new Date(now.getFullYear(), now.getMonth(), 0);
-    while (lastFriday.getDay() !== 5) {
-      lastFriday.setDate(lastFriday.getDate() - 1);
-    }
-    
-    const oneDayBefore = new Date(lastFriday);
-    oneDayBefore.setDate(oneDayBefore.getDate() - 1);
-    
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    oneDayBefore.setHours(0, 0, 0, 0);
-    
-    return today >= oneDayBefore;
+    // Always show remaining salary for active employees if they have unpaid shifts
+    return !!emp;
   };
 
   if (loading) {
@@ -154,7 +162,7 @@ function EmployeeTable({
                     {showRemaining && remaining > 0 ? (
                       <span className="text-sm font-semibold text-amber-600">₱{remaining.toFixed(2)}</span>
                     ) : showRemaining ? (
-                      <span className="text-sm text-green-600">Paid</span>
+                      <span className="text-sm text-slate-500 font-medium">₱0.00</span>
                     ) : (
                       <span className="text-xs text-slate-400">--</span>
                     )}

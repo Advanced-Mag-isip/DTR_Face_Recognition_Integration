@@ -54,7 +54,8 @@ function PaySalaryModal({ isOpen, onClose, employees, lockedEmployee }) {
       const result = await payShifts({
         employeeId: empId,
         shiftIds: selectedShiftIds,
-        payPeriod: selectedPeriod
+        payPeriod: selectedPeriod,
+        month: selectedMonth
       });
       setPaymentSuccess(result);
     } catch (err) {
@@ -99,36 +100,46 @@ function PaySalaryModal({ isOpen, onClose, employees, lockedEmployee }) {
     const { paymentType, hourlyRate, monthlySalary, overtimeHourlyRate } = employee;
     const selectedShifts = unpaidData.shifts.filter(s => selectedShiftIds.includes(s.id));
 
-    // Debug logging
-    console.log('=== PaySalaryModal Debug ===');
-    console.log('Employee:', employee?.firstName, employee?.lastName, '(' + employee?.employeeId + ')');
-    console.log('Pay Period:', selectedPeriod, '| Month:', selectedMonth);
-    console.log('Date Range (expected):', selectedPeriod === 'first' ? 'April 1-15' : selectedPeriod === 'second' ? 'April 16-30' : 'April 1-30');
-    console.log('Total Shifts from API:', unpaidData?.shifts?.length);
-    console.log('Selected Shift IDs:', selectedShiftIds.length);
-    console.log('Hourly Rate:', hourlyRate);
-    if (unpaidData?.shifts?.length > 0) {
-      console.log('Shift Dates from API:', unpaidData.shifts.map(s => s.date).sort());
-    }
-    console.log('Selected Shifts:', selectedShiftIds.length);
-    // End debug
-
     let total = 0;
     const otRate = overtimeHourlyRate ? parseFloat(overtimeHourlyRate) : null;
     
     if (paymentType === 'monthly' && monthlySalary > 0) {
-      const calculatedHourlyRate = monthlySalary / 26 / 8;
+      // If 1st cut-off is selected for a monthly employee, they get 0 (paid only monthly)
+      if (selectedPeriod === 'first') {
+        return 0;
+      }
+
+      const baseHourlyRate = (monthlySalary / 26) / 8;
+      let overtimeTotal = 0;
+      let holidayPremiumTotal = 0;
+      
       selectedShifts.forEach(shift => {
-        total += calculateShiftPay(shift, calculatedHourlyRate, otRate || calculatedHourlyRate);
+        // OT portion
+        const otRate = overtimeHourlyRate ? parseFloat(overtimeHourlyRate) : baseHourlyRate;
+        overtimeTotal += (shift.overtimeHours || 0) * otRate;
+        
+        // Holiday premium portion
+        if (shift.isHoliday) {
+          const regHours = (shift.morningHours || 0) + (shift.afternoonHours || 0);
+          const multiplier = shift.holidayType === 'regular' ? 1.0 : 
+                            shift.holidayType === 'special_non_working' ? 0.3 : 0;
+          holidayPremiumTotal += (regHours * baseHourlyRate * multiplier);
+        }
       });
-    } else if (hourlyRate > 0) {
+      
+      const finalTotal = monthlySalary + overtimeTotal + holidayPremiumTotal;
+      console.log(`%c[DEBUG Modal] Base=${monthlySalary}, OT=${overtimeTotal}, Holiday=${holidayPremiumTotal}, Total=${finalTotal}`, "color: white; background: green; font-weight: bold; padding: 2px 4px; border-radius: 2px;");
+      
+      // Full Fixed Monthly Salary + Extras
+      total = finalTotal;
+    } else if (hourlyRate > 0 || dailySalary > 0) {
+      const effectiveHourlyRate = hourlyRate > 0 ? hourlyRate : (dailySalary / 8);
+      const effectiveOtRate = overtimeHourlyRate ? parseFloat(overtimeHourlyRate) : (effectiveHourlyRate * 1.25);
+      
       selectedShifts.forEach(shift => {
-        total += calculateShiftPay(shift, hourlyRate, otRate || hourlyRate);
+        total += calculateShiftPay(shift, effectiveHourlyRate, effectiveOtRate);
       });
     }
-
-    console.log('Calculated Total:', total);
-    console.log('=====================');
 
     return parseFloat(total.toFixed(2));
   };

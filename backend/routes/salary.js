@@ -241,31 +241,44 @@ router.post('/pay', protect, async (req, res) => {
       whereClause.date = { [Op.between]: [startDate, endDate] };
     } else if (payPeriod) {
       const now = new Date();
-      const year = now.getFullYear();
-      const month = now.getMonth();
-      const monthStart = new Date(year, month, 1);
-      const monthEnd = new Date(year, month + 1, 0);
+      // If a month was passed in the request, use it, otherwise use current month
+      const [year, monthNum] = (req.body.month || req.query.month || `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`).split('-').map(Number);
+      
+      const monthStart = new Date(year, monthNum - 1, 1);
+      const monthEnd = new Date(year, monthNum, 0);
+
+      const getFridaysInMonth = (y, m) => {
+        const fridays = [];
+        const lastDay = new Date(y, m, 0).getDate();
+        for (let day = 1; day <= lastDay; day++) {
+          const date = new Date(y, m - 1, day);
+          if (date.getDay() === 5) fridays.push(new Date(date));
+        }
+        return fridays;
+      };
+
+      const formatDate = (date) => {
+        const y = date.getFullYear();
+        const m = String(date.getMonth() + 1).padStart(2, '0');
+        const d = String(date.getDate()).padStart(2, '0');
+        return `${y}-${m}-${d}`;
+      };
+
+      const fridays = getFridaysInMonth(year, monthNum);
+      const secondFriday = fridays[1] || fridays[0];
+      const lastFriday = fridays[fridays.length - 1] || fridays[0];
 
       if (payPeriod === 'first') {
         whereClause.date = {
-          [Op.between]: [
-            monthStart.toISOString().split('T')[0],
-            new Date(year, month, 15).toISOString().split('T')[0]
-          ]
+          [Op.lte]: secondFriday ? formatDate(secondFriday) : formatDate(new Date(year, monthNum - 1, 15))
         };
       } else if (payPeriod === 'monthly') {
         whereClause.date = {
-          [Op.between]: [
-            monthStart.toISOString().split('T')[0],
-            monthEnd.toISOString().split('T')[0]
-          ]
+          [Op.lte]: formatDate(monthEnd)
         };
-      } else {
+      } else if (payPeriod === 'second') {
         whereClause.date = {
-          [Op.between]: [
-            new Date(year, month, 16).toISOString().split('T')[0],
-            monthEnd.toISOString().split('T')[0]
-          ]
+          [Op.lte]: lastFriday ? formatDate(lastFriday) : formatDate(monthEnd)
         };
       }
     }
@@ -276,37 +289,35 @@ router.post('/pay', protect, async (req, res) => {
     let totalAmount = 0;
 
     if (paymentType === 'monthly' && monthlySalary > 0) {
-      // Use calculator to get OT and Holiday premiums
-      const salaryData = calculateMonthlySalary(
-        shifts,
-        paymentType,
-        hourlyRate,
-        monthlySalary,
-        user.overtimeHourlyRate && parseFloat(user.overtimeHourlyRate)
-      );
-      
-      let baseAmount = monthlySalary;
-      if (payPeriod === 'first' || payPeriod === 'second') {
-        baseAmount = monthlySalary / 2;
-      }
-      
-      // Amount is at least baseAmount for the period, plus any OT/Holidays from shifts
-      totalAmount = Math.max(baseAmount, salaryData.baseSalary) + salaryData.totalHolidayPremium + salaryData.overtimePay;
-    } else if (totalShifts === 0) {
-      return res.status(400).json({ message: 'No unpaid shifts found for the selected period' });
-    } else if (hourlyRate > 0) {
-      shifts.forEach(shift => {
-        const salaryData = calculateShiftSalary(
-          shift,
+      if (payPeriod === 'first') {
+        totalAmount = 0;
+      } else {
+        // Use calculator to get OT and Holiday premiums
+        const salaryData = calculateMonthlySalary(
+          shifts,
           paymentType,
           hourlyRate,
           monthlySalary,
           user.overtimeHourlyRate && parseFloat(user.overtimeHourlyRate)
         );
+        
+        // Full Monthly Salary + OT/Holidays
+        totalAmount = monthlySalary + salaryData.totalHolidayPremium + salaryData.overtimePay;
+      }
+    } else if (totalShifts === 0) {
+      return res.status(400).json({ message: 'No unpaid shifts found for the selected period' });
+    } else if (hourlyRate > 0 || dailySalary > 0) {
+      const effectiveHourlyRate = hourlyRate > 0 ? hourlyRate : (dailySalary / 8);
+      shifts.forEach(shift => {
+        const salaryData = calculateShiftSalary(
+          shift,
+          'hourly',
+          effectiveHourlyRate,
+          0,
+          user.overtimeHourlyRate && parseFloat(user.overtimeHourlyRate) || (effectiveHourlyRate * 1.25)
+        );
         totalAmount += salaryData.totalPay;
       });
-    } else if (dailySalary > 0) {
-      totalAmount = shifts.length * dailySalary;
     }
 
     const paidAt = new Date().toISOString();
@@ -380,11 +391,12 @@ router.get('/unpaid', protect, async (req, res) => {
     // Helper to get Fridays in a month
     const getFridaysInMonth = (year, monthNum) => {
       const fridays = [];
-      const daysInMonth = new Date(year, monthNum, 0).getDate();
-      for (let day = 1; day <= daysInMonth; day++) {
+      // Use UTC to avoid timezone shifts during calculation
+      const lastDay = new Date(year, monthNum, 0).getDate();
+      for (let day = 1; day <= lastDay; day++) {
         const date = new Date(year, monthNum - 1, day);
         if (date.getDay() === 5) { // Friday = 5
-          fridays.push(date);
+          fridays.push(new Date(date));
         }
       }
       return fridays;
@@ -392,41 +404,34 @@ router.get('/unpaid', protect, async (req, res) => {
 
     let whereClause = { employeeId: targetId, isPaid: false };
 
+    const formatDate = (date) => {
+      const y = date.getFullYear();
+      const m = String(date.getMonth() + 1).padStart(2, '0');
+      const d = String(date.getDate()).padStart(2, '0');
+      return `${y}-${m}-${d}`;
+    };
+
     if (month) {
       const [year, monthNum] = month.split('-').map(Number);
-      const monthStart = new Date(year, monthNum - 1, 1);
-      const monthEnd = new Date(year, monthNum, 0);
       const fridays = getFridaysInMonth(year, monthNum);
       const secondFriday = fridays[1] || fridays[0];
       const lastFriday = fridays[fridays.length - 1] || fridays[0];
 
       if (payPeriod === 'first') {
+        // Rolling: All unpaid shifts UP TO the 2nd Friday
         whereClause.date = {
-          [Op.between]: [
-            monthStart.toISOString().split('T')[0],
-            secondFriday ? secondFriday.toISOString().split('T')[0] : new Date(year, monthNum - 1, 15).toISOString().split('T')[0]
-          ]
+          [Op.lte]: secondFriday ? formatDate(secondFriday) : formatDate(new Date(year, monthNum - 1, 15))
         };
       } else if (payPeriod === 'monthly') {
+        // Full month view
+        const monthEnd = new Date(year, monthNum, 0);
         whereClause.date = {
-          [Op.between]: [
-            monthStart.toISOString().split('T')[0],
-            monthEnd.toISOString().split('T')[0]
-          ]
+          [Op.lte]: formatDate(monthEnd)
         };
       } else if (payPeriod === 'second') {
+        // Rolling: All unpaid shifts UP TO the Last Friday
         whereClause.date = {
-          [Op.between]: [
-            new Date(year, monthNum - 1, 16).toISOString().split('T')[0],
-            lastFriday ? lastFriday.toISOString().split('T')[0] : monthEnd.toISOString().split('T')[0]
-          ]
-        };
-      } else {
-        whereClause.date = {
-          [Op.between]: [
-            monthStart.toISOString().split('T')[0],
-            monthEnd.toISOString().split('T')[0]
-          ]
+          [Op.lte]: lastFriday ? formatDate(lastFriday) : formatDate(new Date(year, monthNum, 0))
         };
       }
     }
@@ -455,37 +460,33 @@ router.get('/unpaid', protect, async (req, res) => {
 
     let totalAmount = 0;
     if (paymentType === 'monthly' && monthlySalary > 0) {
-      // Use calculator to get OT and Holiday premiums
-      const salaryData = calculateMonthlySalary(
-        shifts,
-        paymentType,
-        hourlyRate,
-        monthlySalary,
-        user.overtimeHourlyRate && parseFloat(user.overtimeHourlyRate)
-      );
-      
-      let baseAmount = monthlySalary;
-      if (payPeriod === 'first' || payPeriod === 'second') {
-        baseAmount = monthlySalary / 2;
-      } else if (payPeriod === 'monthly') {
-        baseAmount = monthlySalary;
-      }
-      
-      // Amount is at least baseAmount for the period, plus any OT/Holidays from shifts
-      totalAmount = Math.max(baseAmount, salaryData.baseSalary) + salaryData.totalHolidayPremium + salaryData.overtimePay;
-    } else if (hourlyRate > 0) {
-      shifts.forEach(shift => {
-        const salaryData = calculateShiftSalary(
-          shift,
+      if (payPeriod === 'first') {
+        totalAmount = 0;
+      } else {
+        // Use calculator to get OT and Holiday premiums
+        const salaryData = calculateMonthlySalary(
+          shifts,
           paymentType,
           hourlyRate,
           monthlySalary,
           user.overtimeHourlyRate && parseFloat(user.overtimeHourlyRate)
         );
+        
+        // Full Monthly Salary + OT/Holidays
+        totalAmount = monthlySalary + salaryData.totalHolidayPremium + salaryData.overtimePay;
+      }
+    } else if (hourlyRate > 0 || dailySalary > 0) {
+      const effectiveHourlyRate = hourlyRate > 0 ? hourlyRate : (dailySalary / 8);
+      shifts.forEach(shift => {
+        const salaryData = calculateShiftSalary(
+          shift,
+          'hourly',
+          effectiveHourlyRate,
+          0,
+          user.overtimeHourlyRate && parseFloat(user.overtimeHourlyRate) || (effectiveHourlyRate * 1.25)
+        );
         totalAmount += salaryData.totalPay;
       });
-    } else if (dailySalary > 0) {
-      totalAmount = shifts.length * dailySalary;
     }
 
     res.json({

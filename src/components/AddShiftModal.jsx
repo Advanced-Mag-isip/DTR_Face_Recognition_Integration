@@ -154,10 +154,10 @@ function AddShiftModal({ isOpen, onClose, onSave, editingshift, zIndex = 50, emp
     // Include employeeId if provided (for admin creating shifts for employees)
     if (employeeId) {
       shiftData.employeeId = Number(employeeId);
-      console.log('Creating shift for employee ID:', employeeId, '(type:', typeof employeeId, ')');
+      
     }
 
-    console.log('Submitting shift data:', shiftData);
+    
     onSave(shiftData, (errorMsg) => setError(errorMsg));
   };
 
