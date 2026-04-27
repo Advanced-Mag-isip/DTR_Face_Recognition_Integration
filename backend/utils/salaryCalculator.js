@@ -16,15 +16,18 @@ const WORKING_DAYS_PER_MONTH = 26;
  * @returns {Object} { hourlyRate, dailyRate }
  */
 const getRatesByPaymentType = (paymentType, hourlyRate, monthlySalary) => {
-  if (paymentType === 'monthly' && monthlySalary && monthlySalary > 0) {
+  if (paymentType === 'monthly' && monthlySalary > 0) {
     const dailyRate = monthlySalary / WORKING_DAYS_PER_MONTH;
     const hourly = dailyRate / WORKING_HOURS_PER_DAY;
     return { hourlyRate: hourly, dailyRate };
   }
   
-  // For hourly workers or fallback
-  const hourly = hourlyRate && hourlyRate > 0 ? hourlyRate : 0;
-  return { hourlyRate: hourly, dailyRate: hourly * WORKING_HOURS_PER_DAY };
+  // Strict Hourly Logic
+  const hourly = hourlyRate || 0;
+  return { 
+    hourlyRate: hourly, 
+    dailyRate: hourly * WORKING_HOURS_PER_DAY 
+  };
 };
 
 /**
@@ -78,7 +81,6 @@ const getCalculationRates = (paymentType, hourlyRate, monthlySalary, overtimeHou
     overtimeRate: otRate
   };
 };
-
 /**
  * Calculate salary for a single shift with holiday consideration
  * @param {Object} shift - Shift object with morningHours, afternoonHours, overtimeHours, holidayType
