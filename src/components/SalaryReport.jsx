@@ -199,7 +199,7 @@ function SalaryReport({ dailySalary, overtimeHourlyRate, shifts, employeeId, pay
         }
       } catch (e) { savedNotes = {}; }
       
-      const noteKey = `monthly-${selectedMonth}`;
+      const noteKey = `second-${selectedMonth}`;
       const isPaid = savedNotes[noteKey] === 'PAID';
       
       return {

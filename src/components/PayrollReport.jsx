@@ -1,7 +1,9 @@
 import { useState, useEffect } from 'react';
-import { RiFileTextLine, RiDownloadLine, RiEditLine, RiCheckboxCircleLine, RiCloseLine, RiCalendarLine, RiGroupLine, RiMoneyDollarCircleLine, RiArrowDownSLine } from 'react-icons/ri';
+import { RiFileTextLine, RiDownloadLine, RiCheckboxCircleLine, RiCloseLine, RiCalendarLine, RiGroupLine, RiMoneyDollarCircleLine, RiArrowDownSLine } from 'react-icons/ri';
 import { savePayrollNote } from '../utils/usersApi';
 import { calculateShiftPay } from '../utils/salaryCalculator';
+import ExcelJS from 'exceljs';
+import { saveAs } from 'file-saver';
 
 function PayrollReport({ employees, shifts, departments = [] }) {
   const [selectedCycle, setSelectedCycle] = useState('first');
@@ -9,9 +11,18 @@ function PayrollReport({ employees, shifts, departments = [] }) {
   const [selectedDepartment, setSelectedDepartment] = useState('all');
   const [reportData, setReportData] = useState({ hourly: [], monthly: [] });
   const [loading, setLoading] = useState(false);
-  const [editingNote, setEditingNote] = useState(null);
-  const [noteText, setNoteText] = useState('');
-  const [hiddenAmountCount, setHiddenAmountCount] = useState(0);
+  const [showNotesModal, setShowNotesModal] = useState(false);
+  const [selectedNotes, setSelectedNotes] = useState('');
+  const [selectedEmployeeName, setSelectedEmployeeName] = useState('');
+  const [selectedEmployeeId, setSelectedEmployeeId] = useState(null);
+  const [isSaving, setIsSaving] = useState(false);
+
+  const openNotesModal = (notes, name, id) => {
+    setSelectedNotes(notes || '');
+    setSelectedEmployeeName(name);
+    setSelectedEmployeeId(id);
+    setShowNotesModal(true);
+  };
 
   useEffect(() => {
     const now = new Date();
@@ -46,7 +57,6 @@ function PayrollReport({ employees, shifts, departments = [] }) {
     const lastFriday = fridays[fridays.length - 1];
     const paymentDate = new Date(lastFriday);
     
-    // Visibility starts 1 day before payment date
     const visibilityDate = new Date(paymentDate);
     visibilityDate.setDate(paymentDate.getDate() - 1);
     visibilityDate.setHours(0, 0, 0, 0);
@@ -72,9 +82,8 @@ function PayrollReport({ employees, shifts, departments = [] }) {
     const monthEnd = new Date(year, monthNum, 0);
     const fridays = getFridaysInMonth(year, monthNum);
 
-    // Helper to get last Friday of previous month
     const getLastFridayOfPrevMonth = (y, m) => {
-      const d = new Date(y, m - 1, 0); // Last day of prev month
+      const d = new Date(y, m - 1, 0);
       while (d.getDay() !== 5) {
         d.setDate(d.getDate() - 1);
       }
@@ -92,7 +101,6 @@ function PayrollReport({ employees, shifts, departments = [] }) {
       const prevLastFriday = getLastFridayOfPrevMonth(year, monthNum);
       const startDate = new Date(prevLastFriday);
       startDate.setDate(startDate.getDate() + 1);
-      
       const secondFriday = fridays[1] || fridays[0];
       
       return {
@@ -101,11 +109,10 @@ function PayrollReport({ employees, shifts, departments = [] }) {
         startDate: formatDate(startDate),
         endDate: secondFriday ? formatDate(secondFriday) : formatDate(new Date(year, monthNum - 1, 15))
       };
-    } else if (cycle === 'second') {
+    } else {
       const secondFriday = fridays[1] || fridays[0];
       const startDate = new Date(secondFriday);
       startDate.setDate(startDate.getDate() + 1);
-      
       const lastFriday = fridays[fridays.length - 1] || fridays[0];
       
       return {
@@ -113,13 +120,6 @@ function PayrollReport({ employees, shifts, departments = [] }) {
         subtitle: `${startDate.toLocaleDateString('en-PH', { month: 'short', day: 'numeric' })} - ${lastFriday ? lastFriday.toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' }) : 'Last Friday'}`,
         startDate: formatDate(startDate),
         endDate: lastFriday ? formatDate(lastFriday) : formatDate(monthEnd)
-      };
-    } else {
-      return {
-        label: `PAYROLL - MONTHLY`,
-        subtitle: `${monthStart.toLocaleDateString('en-PH', { month: 'long', year: 'numeric' })} - Full Month`,
-        startDate: formatDate(monthStart),
-        endDate: formatDate(monthEnd)
       };
     }
   };
@@ -132,7 +132,6 @@ function PayrollReport({ employees, shifts, departments = [] }) {
       const startDate = dates.startDate;
       const endDate = dates.endDate;
       const shouldHideMonthly = isMonthlyAmountHidden(selectedMonth);
-      let hideCount = 0;
       
       const filteredEmployees = selectedDepartment === 'all' 
         ? employees 
@@ -141,8 +140,6 @@ function PayrollReport({ employees, shifts, departments = [] }) {
       const hourlyEmployees = filteredEmployees
         .filter(emp => emp.isActive !== false && (emp.paymentType === 'hourly' || !emp.paymentType))
         .map(emp => {
-          // Strictly filter shifts within the range AND unpaid
-          // OR shifts that are in the range AND already paid
           const empShifts = shifts.filter(s => 
             s.employeeId === emp.id && 
             s.date >= startDate &&
@@ -161,103 +158,107 @@ function PayrollReport({ employees, shifts, departments = [] }) {
           let unpaidAmount = 0;
           let paidAmount = 0;
           let overtimeHours = 0;
-          let holidayNote = '';
           
           const holidayShifts = empShifts.filter(s => s.isHoliday);
+          let holidayNote = '';
           if (holidayShifts.length > 0) {
-            const holidays = [...new Set(holidayShifts.map(s => s.holidayName))];
-            holidayNote = holidays.join(', ');
+            const regularHolidays = holidayShifts.filter(s => s.holidayType === 'regular');
+            const specialHolidays = holidayShifts.filter(s => s.holidayType === 'special_non_working');
+            
+            const holidayParts = [];
+            if (regularHolidays.length > 0) {
+              const names = [...new Set(regularHolidays.map(s => s.holidayName))].join(', ');
+              holidayParts.push(`${regularHolidays.length} Regular Holiday${regularHolidays.length > 1 ? 's' : ''} (${names})`);
+            }
+            if (specialHolidays.length > 0) {
+              const names = [...new Set(specialHolidays.map(s => s.holidayName))].join(', ');
+              holidayParts.push(`${specialHolidays.length} Special Non-working Holiday${specialHolidays.length > 1 ? 's' : ''} (${names})`);
+            }
+            holidayNote = holidayParts.join(', ');
           }
           
-          // Calculate Unpaid Amount
           unpaidShifts.forEach(shift => {
             overtimeHours += shift.overtimeHours || 0;
             unpaidAmount += calculateShiftPay(shift, effectiveHourlyRate, overtimeHourlyRate);
           });
 
-          // Calculate Paid Amount
           paidShifts.forEach(shift => {
             paidAmount += calculateShiftPay(shift, effectiveHourlyRate, overtimeHourlyRate);
           });
+
+          const totalGross = parseFloat((unpaidAmount + paidAmount).toFixed(2));
           
+          const daysStr = overtimeHours > 0 
+            ? `${daysWorked} day${daysWorked !== 1 ? 's' : ''} and ${overtimeHours} hr${overtimeHours !== 1 ? 's' : ''}` 
+            : `${daysWorked} day${daysWorked !== 1 ? 's' : ''}`;
+
           return {
             id: emp.id,
             name: emp.firstName && emp.lastName ? `${emp.firstName} ${emp.lastName}` : emp.employeeId,
+            position: emp.position || '-',
             department: emp.department || '-',
             rate: hourlyRate > 0 ? `${hourlyRate}/hr` : (dailySalary > 0 ? `${dailySalary}/day` : '-'),
-            paymentDetails: emp.paymentDetails || emp.paymentMethod || '-',
-            days: daysWorked,
-            unpaidDays: unpaidShifts.length,
-            adjustments: '',
-            amount: parseFloat(unpaidAmount.toFixed(2)),
+            paymentDetails: `${emp.paymentMethod?.toUpperCase().replace('_', ' ') || 'GCASH'}: ${emp.paymentDetails || '-'}`,
+            days: daysStr,
+            amount: totalGross,
             paidAmount: parseFloat(paidAmount.toFixed(2)),
+            unpaidAmount: parseFloat(unpaidAmount.toFixed(2)),
             status: (unpaidShifts.length === 0 && daysWorked > 0) ? 'PAID' : 
                     (paidShifts.length > 0 && unpaidShifts.length > 0) ? 'PARTIAL' :
                     unpaidShifts.length > 0 ? 'UNPAID' : '-',
             note: (() => {
-            let savedNotes = {};
-            try {
-              if (emp.payrollNotes) {
-                savedNotes = typeof emp.payrollNotes === 'string' ? JSON.parse(emp.payrollNotes) : emp.payrollNotes;
-              }
-            } catch (e) { savedNotes = {}; }
-            return savedNotes[`${selectedCycle}-${selectedMonth}`] || (overtimeHours > 0 ? `${overtimeHours} OT hours` : '');
-            })()          };
+              let savedNotes = {};
+              try {
+                if (emp.payrollNotes) {
+                  savedNotes = typeof emp.payrollNotes === 'string' ? JSON.parse(emp.payrollNotes) : emp.payrollNotes;
+                }
+              } catch (e) { savedNotes = {}; }
+              return savedNotes[`${selectedCycle}-${selectedMonth}`] || holidayNote;
+            })()
+          };
         })
-        .filter(r => r.days > 0);
+        .filter(r => parseInt(r.days) > 0);
 
       const monthlyEmployees = filteredEmployees
         .filter(emp => emp.isActive !== false && emp.paymentType === 'monthly')
         .map(emp => {
           const monthlySalary = parseFloat(emp.monthlySalary) || 0;
-          
-          // Monthly employees are paid ONLY on the 2nd Cut-off or Monthly report
-          if (selectedCycle === 'first') {
-            return {
-              id: emp.id,
-              name: emp.firstName && emp.lastName ? `${emp.firstName} ${emp.lastName}` : emp.employeeId,
-              department: emp.department || '-',
-              rate: `${monthlySalary.toLocaleString()}/month`,
-              paymentDetails: emp.paymentDetails || emp.paymentMethod || '-',
-              adjustments: '',
-              amount: 0,
-              paidAmount: 0,
-              status: '-',
-              note: 'Paid at 2nd Cut-off'
-            };
-          }
+          if (selectedCycle === 'first') return null;
 
-          const empShifts = shifts.filter(s => 
-            s.employeeId === emp.id && 
-            s.date <= endDate
-          );
-          
+          const empShifts = shifts.filter(s => s.employeeId === emp.id && s.date <= endDate);
           const paidShifts = empShifts.filter(s => s.isPaid);
           const unpaidShifts = empShifts.filter(s => !s.isPaid);
           
           let overtimeHours = 0;
           let holidayPremium = 0;
-          let holidayNote = '';
+          let regHolidayList = [];
+          let specHolidayList = [];
           
           const hourlyRate = (monthlySalary / 26) / 8;
           const overtimeHourlyRate = parseFloat(emp.overtimeHourlyRate) || hourlyRate;
           
           empShifts.forEach(shift => {
             overtimeHours += shift.overtimeHours || 0;
-            
-            // Calculate holiday premium if applicable
             if (shift.isHoliday && shift.holidayType) {
               const multiplier = shift.holidayType === 'regular' ? 1.0 : 
                                 shift.holidayType === 'special_non_working' ? 0.3 : 0;
               const regHours = (shift.morningHours || 0) + (shift.afternoonHours || 0);
-              // For monthly employees, only add the EXTRA premium, as base is already in monthlySalary
               holidayPremium += (regHours * hourlyRate) * multiplier;
-              
-              if (shift.holidayName && !holidayNote.includes(shift.holidayName)) {
-                holidayNote = holidayNote ? `${holidayNote}, ${shift.holidayName}` : shift.holidayName;
-              }
+              if (shift.holidayType === 'regular') regHolidayList.push(shift.holidayName);
+              else if (shift.holidayType === 'special_non_working') specHolidayList.push(shift.holidayName);
             }
           });
+
+          const holidayParts = [];
+          if (regHolidayList.length > 0) {
+            const names = [...new Set(regHolidayList)].join(', ');
+            holidayParts.push(`${regHolidayList.length} Regular Holiday${regHolidayList.length > 1 ? 's' : ''} (${names})`);
+          }
+          if (specHolidayList.length > 0) {
+            const names = [...new Set(specHolidayList)].join(', ');
+            holidayParts.push(`${specHolidayList.length} Special Non-working Holiday${specHolidayList.length > 1 ? 's' : ''} (${names})`);
+          }
+          const holidayNote = holidayParts.join(', ');
           
           const overtimePay = overtimeHours * overtimeHourlyRate;
           const totalGross = parseFloat((monthlySalary + overtimePay + holidayPremium).toFixed(2));
@@ -270,31 +271,28 @@ function PayrollReport({ employees, shifts, departments = [] }) {
           } catch (e) { savedNotes = {}; }
           
           const noteKey = `${selectedCycle}-${selectedMonth}`;
-          const isPaidNote = savedNotes[noteKey] === 'PAID';
-          const allShiftsPaid = empShifts.length > 0 && empShifts.every(s => s.isPaid);
+          const isFullPaid = savedNotes[noteKey] === 'PAID' || (empShifts.length > 0 && empShifts.every(s => s.isPaid));
           const someShiftsPaid = empShifts.some(s => s.isPaid);
-          
-          const isFullPaid = isPaidNote || allShiftsPaid;
           const isAmountHidden = shouldHideMonthly && !isFullPaid && (totalGross > 0);
-          if (isAmountHidden) hideCount++;
 
           return {
             id: emp.id,
             name: emp.firstName && emp.lastName ? `${emp.firstName} ${emp.lastName}` : emp.employeeId,
+            position: emp.position || '-',
             department: emp.department || '-',
             rate: `${monthlySalary.toLocaleString()}/month`,
-            paymentDetails: emp.paymentDetails || emp.paymentMethod || '-',
-            adjustments: '',
-            amount: isFullPaid ? 0 : totalGross,
+            paymentDetails: `${emp.paymentMethod?.toUpperCase().replace('_', ' ') || 'GCASH'}: ${emp.paymentDetails || '-'}`,
+            amount: totalGross,
             paidAmount: isFullPaid ? totalGross : 0,
+            unpaidAmount: isFullPaid ? 0 : totalGross,
             status: isFullPaid ? 'PAID' : (someShiftsPaid ? 'PARTIAL' : 'UNPAID'),
             isAmountHidden,
-            note: savedNotes[noteKey] || (holidayNote ? `${holidayNote}${overtimeHours > 0 ? ' + OT' : ''}` : overtimeHours > 0 ? `${overtimeHours} OT hours` : '')
+            days: `${empShifts.length} days`,
+            note: savedNotes[noteKey] || holidayNote
           };
-        });
+        }).filter(Boolean);
       
       setReportData({ hourly: hourlyEmployees, monthly: monthlyEmployees });
-      setHiddenAmountCount(hideCount);
     } catch (err) {
       console.error('Error generating report:', err);
     } finally {
@@ -309,84 +307,255 @@ function PayrollReport({ employees, shifts, departments = [] }) {
   }, [selectedCycle, selectedMonth, selectedDepartment, employees, shifts]);
 
   const handleSaveNote = async (employeeId, note) => {
+    setIsSaving(true);
     try {
       const period = `${selectedCycle}-${selectedMonth}`;
       await savePayrollNote(employeeId, period, note);
-      
-      if (selectedCycle === 'first' || selectedCycle === 'second') {
-        setReportData(prev => ({
-          ...prev,
-          hourly: prev.hourly.map(e => e.id === employeeId ? { ...e, note } : e)
-        }));
-      } else {
-        setReportData(prev => ({
-          ...prev,
-          monthly: prev.monthly.map(e => e.id === employeeId ? { ...e, note } : e)
-        }));
-      }
+      generateReport();
+      setShowNotesModal(false);
     } catch (err) {
       console.error('Error saving note:', err);
       alert('Failed to save note');
+    } finally {
+      setIsSaving(false);
     }
-    setEditingNote(null);
-    setNoteText('');
-  };
-
-  const startEditNote = (employeeId, currentNote) => {
-    setEditingNote(employeeId);
-    setNoteText(currentNote || '');
   };
 
   const cycleInfo = getCycleDates(selectedCycle, selectedMonth);
-  const displayData = selectedCycle === 'first' || selectedCycle === 'second' ? reportData.hourly : reportData.monthly;
-  const isMonthly = selectedCycle === 'monthly';
+  const displayData = selectedCycle === 'first' 
+    ? reportData.hourly 
+    : [...reportData.hourly, ...reportData.monthly];
 
   const totalAmount = parseFloat(displayData.reduce((sum, r) => sum + r.amount, 0).toFixed(2));
-  const totalDays = displayData.reduce((sum, r) => sum + r.days, 0);
+
+  const handleExportExcel = async () => {
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet('Payroll Report');
+    
+    // Standard columns
+    const columns = [
+      { header: 'NAME', key: 'name', width: 25 },
+      { header: 'POSITION', key: 'position', width: 20 },
+      { header: 'DEPARTMENT', key: 'department', width: 15 },
+      { header: 'RATE', key: 'rate', width: 15 },
+      { header: 'PAYMENT DETAILS', key: 'paymentDetails', width: 30 },
+      { header: 'DAYS', key: 'days', width: 15 },
+      { header: 'AMOUNT', key: 'amount', width: 15 },
+      { header: 'STATUS', key: 'status', width: 20 },
+      { header: 'NOTE', key: 'note', width: 30 }
+    ];
+
+    worksheet.columns = columns;
+
+    const deptsToExport = selectedDepartment === 'all' 
+      ? deptList.filter(d => d !== 'all') 
+      : [selectedDepartment];
+
+    let currentRow = 1;
+
+    // Helper to get data for a specific cycle and department
+    const getTableData = (cycle, dept) => {
+      const dates = getCycleDates(cycle, selectedMonth);
+      const startDate = dates.startDate;
+      const endDate = dates.endDate;
+      const shouldHideMonthly = isMonthlyAmountHidden(selectedMonth);
+      
+      const deptEmployees = employees.filter(emp => emp.department === dept);
+      
+      const hourlyData = deptEmployees
+        .filter(emp => emp.isActive !== false && (emp.paymentType === 'hourly' || !emp.paymentType))
+        .map(emp => {
+          const empShifts = shifts.filter(s => 
+            s.employeeId === emp.id && 
+            s.date >= startDate &&
+            s.date <= endDate
+          );
+          const dailySalary = parseFloat(emp.dailySalary) || 0;
+          const hourlyRate = parseFloat(emp.hourlyRate) || 0;
+          const effectiveHourlyRate = hourlyRate > 0 ? hourlyRate : (dailySalary / 8);
+          const overtimeHourlyRate = parseFloat(emp.overtimeHourlyRate) || (effectiveHourlyRate * 1.25);
+          
+          const daysWorked = empShifts.length;
+          const unpaidShifts = empShifts.filter(s => !s.isPaid);
+          const paidShifts = empShifts.filter(s => s.isPaid);
+          
+          let unpaidAmount = 0;
+          let paidAmount = 0;
+          let overtimeHours = 0;
+          
+          unpaidShifts.forEach(shift => {
+            overtimeHours += shift.overtimeHours || 0;
+            unpaidAmount += calculateShiftPay(shift, effectiveHourlyRate, overtimeHourlyRate);
+          });
+
+          paidShifts.forEach(shift => {
+            paidAmount += calculateShiftPay(shift, effectiveHourlyRate, overtimeHourlyRate);
+          });
+
+          const totalGross = parseFloat((unpaidAmount + paidAmount).toFixed(2));
+
+          const daysStr = overtimeHours > 0 
+            ? `${daysWorked} day${daysWorked !== 1 ? 's' : ''} and ${overtimeHours} hr${overtimeHours !== 1 ? 's' : ''}` 
+            : `${daysWorked} day${daysWorked !== 1 ? 's' : ''}`;
+
+          // Holiday logic for notes
+          const holidayShifts = empShifts.filter(s => s.isHoliday);
+          let holidayNote = '';
+          if (holidayShifts.length > 0) {
+            const regNames = [...new Set(holidayShifts.filter(s => s.holidayType === 'regular').map(s => s.holidayName))].join(', ');
+            const specNames = [...new Set(holidayShifts.filter(s => s.holidayType === 'special_non_working').map(s => s.holidayName))].join(', ');
+            holidayNote = [regNames ? `Reg: ${regNames}` : '', specNames ? `Spec: ${specNames}` : ''].filter(Boolean).join(' | ');
+          }
+
+          const status = (unpaidShifts.length === 0 && daysWorked > 0) ? 'PAID' : 
+                         (paidShifts.length > 0 && unpaidShifts.length > 0) ? `PARTIAL (₱${unpaidAmount.toLocaleString()} left)` :
+                         unpaidShifts.length > 0 ? 'UNPAID' : '-';
+
+          return {
+            name: `${emp.firstName} ${emp.lastName}`,
+            position: emp.position || '-',
+            department: emp.department || '-',
+            rate: hourlyRate > 0 ? `${hourlyRate}/hr` : (dailySalary > 0 ? `${dailySalary}/day` : '-'),
+            paymentDetails: `${emp.paymentMethod?.toUpperCase().replace('_', ' ') || 'GCASH'}: ${emp.paymentDetails || '-'}`,
+            days: daysStr,
+            amount: totalGross,
+            status: status,
+            note: (() => {
+              let savedNotes = {};
+              try { if (emp.payrollNotes) savedNotes = typeof emp.payrollNotes === 'string' ? JSON.parse(emp.payrollNotes) : emp.payrollNotes; } catch (e) {}
+              return savedNotes[`${cycle}-${selectedMonth}`] || holidayNote;
+            })()
+          };
+        })
+        .filter(r => parseInt(r.days) > 0);
+
+      const monthlyData = cycle === 'first' ? [] : deptEmployees
+        .filter(emp => emp.isActive !== false && emp.paymentType === 'monthly')
+        .map(emp => {
+          const monthlySalary = parseFloat(emp.monthlySalary) || 0;
+          const empShifts = shifts.filter(s => s.employeeId === emp.id && s.date <= endDate);
+          const hourlyRate = (monthlySalary / 26) / 8;
+          let overtimeHours = 0;
+          let holidayPremium = 0;
+          
+          empShifts.forEach(shift => {
+            overtimeHours += shift.overtimeHours || 0;
+            if (shift.isHoliday) {
+              const multiplier = shift.holidayType === 'regular' ? 1.0 : shift.holidayType === 'special_non_working' ? 0.3 : 0;
+              holidayPremium += ((shift.morningHours || 0) + (shift.afternoonHours || 0)) * hourlyRate * multiplier;
+            }
+          });
+
+          const totalGross = parseFloat((monthlySalary + (overtimeHours * (emp.overtimeHourlyRate || hourlyRate)) + holidayPremium).toFixed(2));
+          let savedNotes = {};
+          try { if (emp.payrollNotes) savedNotes = typeof emp.payrollNotes === 'string' ? JSON.parse(emp.payrollNotes) : emp.payrollNotes; } catch (e) {}
+          const isPaid = savedNotes[`${cycle}-${selectedMonth}`] === 'PAID' || (empShifts.length > 0 && empShifts.every(s => s.isPaid));
+
+          return {
+            name: `${emp.firstName} ${emp.lastName}`,
+            position: emp.position || '-',
+            department: emp.department || '-',
+            rate: `${monthlySalary.toLocaleString()}/month`,
+            paymentDetails: `${emp.paymentMethod?.toUpperCase().replace('_', ' ') || 'GCASH'}: ${emp.paymentDetails || '-'}`,
+            days: `${empShifts.length} days`,
+            amount: totalGross,
+            status: isPaid ? 'PAID' : (empShifts.some(s => s.isPaid) ? 'PARTIAL' : 'UNPAID'),
+            note: savedNotes[`${cycle}-${selectedMonth}`] || ''
+          };
+        });
+
+      return [...hourlyData, ...monthlyData];
+    };
+
+    for (const dept of deptsToExport) {
+      const firstHalfData = getTableData('first', dept);
+      const secondHalfData = getTableData('second', dept);
+
+      // Special Case: If only second half has data, it might be a Monthly-only department
+      if (firstHalfData.length === 0 && secondHalfData.length > 0) {
+        addTableToSheet(worksheet, secondHalfData, `PAYROLL - ${dept.toUpperCase()}`);
+        worksheet.addRow([]); worksheet.addRow([]); // 2 rows separation
+      } else {
+        if (firstHalfData.length > 0) {
+          addTableToSheet(worksheet, firstHalfData, `PAYROLL (FIRST HALF) - ${dept.toUpperCase()}`);
+          worksheet.addRow([]); worksheet.addRow([]);
+        }
+        if (secondHalfData.length > 0) {
+          addTableToSheet(worksheet, secondHalfData, `PAYROLL (SECOND HALF) - ${dept.toUpperCase()}`);
+          worksheet.addRow([]); worksheet.addRow([]);
+        }
+      }
+    }
+
+    function addTableToSheet(ws, data, title) {
+      const startRow = ws.lastRow ? ws.lastRow.number + 1 : 1;
+      
+      // Title Row
+      const titleRow = ws.addRow([title]);
+      ws.mergeCells(titleRow.number, 1, titleRow.number, 9);
+      titleRow.font = { bold: true };
+      titleRow.alignment = { vertical: 'middle', horizontal: 'center' };
+      titleRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'DDEBF7' } };
+
+      // Header Row
+      const headerRow = ws.addRow(columns.map(c => c.header));
+      headerRow.font = { bold: true };
+      headerRow.eachCell(cell => {
+        cell.alignment = { vertical: 'middle', horizontal: 'center' };
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'F2F2F2' } };
+        cell.border = { top: {style:'thin'}, left: {style:'thin'}, bottom: {style:'thin'}, right: {style:'thin'} };
+      });
+
+      // Data Rows
+      data.forEach(r => {
+        const row = ws.addRow([r.name, r.position, r.department, r.rate, r.paymentDetails, r.days, r.amount, r.status, r.note]);
+        row.eachCell((cell, colNumber) => {
+          cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
+          cell.border = { top: {style:'thin'}, left: {style:'thin'}, bottom: {style:'thin'}, right: {style:'thin'} };
+          
+          if (colNumber === 7) { // Amount column
+            cell.numFmt = '\"₱\"#,##0.00';
+            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'E2EFDA' } }; // Light Green
+          }
+          if (colNumber === 8) { // Status column
+            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF2CC' } }; // Light Yellow
+          }
+        });
+      });
+
+      // Total Row
+      const totalAmount = data.reduce((sum, r) => sum + r.amount, 0);
+      const totalRow = ws.addRow([]);
+      ws.mergeCells(totalRow.number, 1, totalRow.number, 6);
+      totalRow.getCell(1).value = `TOTAL (${data.length} EMPLOYEES)`;
+      totalRow.getCell(7).value = totalAmount;
+      
+      // Style Total Row (Columns 1-9)
+      for (let i = 1; i <= 9; i++) {
+        const cell = totalRow.getCell(i);
+        cell.font = { bold: true };
+        cell.alignment = { vertical: 'middle', horizontal: 'center' };
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF2CC' } };
+        cell.border = { top: {style:'thin'}, left: {style:'thin'}, bottom: {style:'thin'}, right: {style:'thin'} };
+        if (i === 7) cell.numFmt = '\"₱\"#,##0.00';
+      }
+    }
+
+    const buffer = await workbook.xlsx.writeBuffer();
+    saveAs(new Blob([buffer]), `payroll-report-${selectedMonth}.xlsx`);
+  };
+
+  const cycleButtons = [
+    { key: 'first', label: '1st Half', desc: '1st - 2nd Friday' },
+    { key: 'second', label: '2nd Half', desc: 'Post 2nd Friday + Monthly' }
+  ];
 
   const deptList = departments && departments.length > 0 
     ? ['all', ...departments.map(d => d.name)]
     : ['all', ...new Set(employees.map(e => e.department).filter(Boolean))];
 
-  const handleExportCSV = () => {
-    let csv = '';
-    
-    csv += `${cycleInfo.label}\n`;
-    csv += selectedDepartment !== 'all' ? `Department: ${selectedDepartment}\n` : '';
-    
-    if (isMonthly) {
-      csv += `NAME,DEPARTMENT,MONTHLY RATE,GCASH NUMBER,ADJUSTMENTS,AMOUNT,STATUS,NOTE\n`;
-    } else {
-      csv += `NAME,DEPARTMENT,DAILY RATE,GCASH NUMBER,NUMBER OF DAYS,ADJUSTMENTS,AMOUNT,STATUS,NOTE\n`;
-    }
-    
-    displayData.forEach(r => {
-      if (isMonthly) {
-        csv += `"${r.name}","${r.department}","${r.rate}","${r.paymentDetails}","${r.adjustments}","${r.amount.toFixed(2)}","${r.status}","${r.note}"\n`;
-      } else {
-        csv += `"${r.name}","${r.department}","${r.rate}","${r.paymentDetails}","${r.days}","${r.adjustments}","${r.amount.toFixed(2)}","${r.status}","${r.note}"\n`;
-      }
-    });
-    
-    csv += `TOTAL,,,"${isMonthly ? '' : totalDays}","","${totalAmount.toFixed(2)}",,\n`;
-    
-    const blob = new Blob([csv], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `payroll-${selectedCycle}-${selectedMonth}${selectedDepartment !== 'all' ? '-' + selectedDepartment : ''}.csv`;
-    a.click();
-  };
-
-  const cycleButtons = [
-    { key: 'first', label: '1st Half', desc: '1st - 2nd Friday' },
-    { key: 'second', label: '2nd Half', desc: 'Post 2nd Friday' },
-    { key: 'monthly', label: 'Monthly', desc: 'Full Month' }
-  ];
-
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div className="flex items-center gap-3">
           <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center shadow-lg shadow-blue-500/30">
@@ -398,79 +567,45 @@ function PayrollReport({ employees, shifts, departments = [] }) {
           </div>
         </div>
         <div className="flex items-center gap-3">
-          <button
-            onClick={generateReport}
-            className="flex items-center gap-2 px-5 py-2.5 bg-white border border-slate-200 text-slate-700 rounded-xl text-sm font-semibold hover:bg-slate-50 hover:border-slate-300 transition-all shadow-sm"
-          >
-            <RiFileTextLine className="w-4 h-4" />
-            Refresh
+          <button onClick={generateReport} className="flex items-center gap-2 px-5 py-2.5 bg-white border border-slate-200 text-slate-700 rounded-xl text-sm font-semibold hover:bg-slate-50 transition-all shadow-sm">
+            <RiFileTextLine className="w-4 h-4" /> Refresh
           </button>
-          <button
-            onClick={handleExportCSV}
-            className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-xl text-sm font-semibold hover:from-green-600 hover:to-emerald-700 transition-all shadow-lg shadow-green-500/30"
-          >
-            <RiDownloadLine className="w-4 h-4" />
-            Export CSV
+          <button onClick={handleExportExcel} className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-xl text-sm font-semibold hover:from-green-600 transition-all shadow-lg">
+            <RiDownloadLine className="w-4 h-4" /> Export Excel
           </button>
         </div>
       </div>
 
-      {/* Filters */}
       <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-5">
         <div className="flex flex-wrap items-end gap-4">
-          {/* Month Filter */}
           <div className="min-w-[180px]">
             <label className="flex items-center gap-2 text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">
-              <RiCalendarLine className="w-4 h-4" />
-              Period
+              <RiCalendarLine className="w-4 h-4" /> Period
             </label>
-            <input
-              type="month"
-              value={selectedMonth}
-              onChange={(e) => setSelectedMonth(e.target.value)}
-              className="w-full px-4 py-3 rounded-xl border border-slate-200 text-slate-800 font-medium focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 transition-all"
-            />
+            <input type="month" value={selectedMonth} onChange={(e) => setSelectedMonth(e.target.value)} className="w-full px-4 py-3 rounded-xl border border-slate-200 text-slate-800 font-medium focus:ring-2 focus:ring-blue-500/50 outline-none" />
           </div>
 
-          {/* Department Filter */}
           <div className="min-w-[200px]">
             <label className="flex items-center gap-2 text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">
-              <RiGroupLine className="w-4 h-4" />
-              Department
+              <RiGroupLine className="w-4 h-4" /> Department
             </label>
             <div className="relative">
-              <select
-                value={selectedDepartment}
-                onChange={(e) => setSelectedDepartment(e.target.value)}
-                className="appearance-none w-full px-4 py-3 pr-10 rounded-xl border border-slate-200 text-slate-800 font-medium focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 transition-all bg-white"
-              >
+              <select value={selectedDepartment} onChange={(e) => setSelectedDepartment(e.target.value)} className="appearance-none w-full px-4 py-3 pr-10 rounded-xl border border-slate-200 text-slate-800 font-medium outline-none bg-white">
                 <option value="all">All Departments</option>
-                {deptList.filter(d => d !== 'all').map(dept => (
-                  <option key={dept} value={dept}>{dept}</option>
-                ))}
+                {deptList.filter(d => d !== 'all').map(dept => <option key={dept} value={dept}>{dept}</option>)}
               </select>
               <RiArrowDownSLine className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400 pointer-events-none" />
             </div>
           </div>
 
-          {/* Pay Period Tabs */}
           <div className="flex-1">
             <label className="flex items-center gap-2 text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">
-              <RiMoneyDollarCircleLine className="w-4 h-4" />
-              Pay Period
+              <RiMoneyDollarCircleLine className="w-4 h-4" /> Pay Period
             </label>
             <div className="flex gap-2">
               {cycleButtons.map(btn => (
-                <button
-                  key={btn.key}
-                  onClick={() => setSelectedCycle(btn.key)}
-                  className={`flex-1 px-4 py-3 rounded-xl text-sm font-semibold transition-all ${
-                    selectedCycle === btn.key 
-                      ? 'bg-gradient-to-r from-blue-500 to-indigo-600 text-white shadow-lg shadow-blue-500/30' 
-                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                  }`}
-                >
-                  <div className="font-medium">{btn.label}</div>
+                <button key={btn.key} onClick={() => setSelectedCycle(btn.key)} className={`flex-1 px-4 py-3 rounded-xl text-sm font-semibold transition-all ${selectedCycle === btn.key ? 'bg-gradient-to-r from-blue-500 to-indigo-600 text-white shadow-lg' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>
+                  <div>{btn.label}</div>
                   <div className={`text-xs ${selectedCycle === btn.key ? 'text-blue-100' : 'text-slate-400'}`}>{btn.desc}</div>
                 </button>
               ))}
@@ -479,66 +614,28 @@ function PayrollReport({ employees, shifts, departments = [] }) {
         </div>
       </div>
 
-      {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-2xl p-5 border border-blue-100">
-          <p className="text-xs font-semibold text-blue-500 uppercase tracking-wider mb-1">Total Employees</p>
-          <p className="text-3xl font-bold text-blue-700">{displayData.length}</p>
-          <p className="text-xs text-blue-400 mt-1">{isMonthly ? 'Monthly rate employees' : 'Hourly/Daily rate employees'}</p>
-        </div>
-        <div className="bg-gradient-to-br from-green-50 to-emerald-50 rounded-2xl p-5 border border-green-100">
-          <p className="text-xs font-semibold text-green-500 uppercase tracking-wider mb-1">Paid</p>
-          <p className="text-3xl font-bold text-green-700">{displayData.filter(d => d.status === 'PAID').length}</p>
-          <p className="text-xs text-green-400 mt-1">{displayData.filter(d => d.status === 'PAID').length} employees already paid</p>
-        </div>
-        <div className="bg-gradient-to-br from-amber-50 to-orange-50 rounded-2xl p-5 border border-amber-100">
-          <p className="text-xs font-semibold text-amber-500 uppercase tracking-wider mb-1">Unpaid</p>
-          <p className="text-3xl font-bold text-amber-700">{displayData.filter(d => d.status === 'UNPAID').length}</p>
-          <p className="text-xs text-amber-400 mt-1">Employees pending payment</p>
-        </div>
-      </div>
-
-      {/* Report Table */}
       <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-        {/* Table Header */}
         <div className="px-6 py-4 bg-gradient-to-r from-slate-50 to-slate-100 border-b border-slate-200">
-          <div className="flex items-center justify-between">
-            <div>
-              <h3 className="text-lg font-bold text-slate-800">{cycleInfo.label}</h3>
-              <p className="text-sm text-slate-500">{cycleInfo.subtitle}</p>
-            </div>
-            {selectedDepartment !== 'all' && (
-              <span className="px-3 py-1.5 bg-blue-100 text-blue-700 text-xs font-semibold rounded-full">
-                {selectedDepartment}
-              </span>
-            )}
-          </div>
+          <h3 className="text-lg font-bold text-slate-800">{cycleInfo.label}</h3>
+          <p className="text-sm text-slate-500">{cycleInfo.subtitle}</p>
         </div>
 
         {loading ? (
-          <div className="p-16 text-center">
-            <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-3"></div>
-            <p className="text-slate-500">Generating report...</p>
-          </div>
+          <div className="p-16 text-center"><div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-3"></div><p className="text-slate-500">Generating report...</p></div>
         ) : displayData.length === 0 ? (
-          <div className="p-16 text-center">
-            <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
-              <RiFileTextLine className="w-8 h-8 text-slate-300" />
-            </div>
-            <p className="text-slate-500 font-medium">No employees found for this period</p>
-            <p className="text-sm text-slate-400 mt-1">Try changing the filters above</p>
-          </div>
+          <div className="p-16 text-center"><RiFileTextLine className="w-16 h-16 text-slate-200 mx-auto mb-4" /><p className="text-slate-500 font-medium">No employees found for this period</p></div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
                 <tr className="bg-slate-50 text-left">
                   <th className="px-6 py-3.5 text-xs font-bold text-slate-500 uppercase tracking-wider">NAME</th>
+                  <th className="px-6 py-3.5 text-xs font-bold text-slate-500 uppercase tracking-wider">POSITION</th>
                   <th className="px-6 py-3.5 text-xs font-bold text-slate-500 uppercase tracking-wider">DEPT</th>
-                  <th className="px-6 py-3.5 text-xs font-bold text-slate-500 uppercase tracking-wider">RATE</th>
-                  <th className="px-6 py-3.5 text-xs font-bold text-slate-500 uppercase tracking-wider">PAYMENT</th>
-                  {!isMonthly && <th className="px-6 py-3.5 text-xs font-bold text-slate-500 uppercase tracking-wider text-center">DAYS</th>}
-                  <th className="px-6 py-3.5 text-xs font-bold text-slate-500 uppercase tracking-wider text-right">AMOUNT</th>
+                  <th className="px-6 py-3.5 text-xs font-bold text-slate-500 uppercase tracking-wider text-left">RATE</th>
+                  <th className="px-6 py-3.5 text-xs font-bold text-slate-500 uppercase tracking-wider">PAYMENT METHOD & DETAILS</th>
+                  <th className="px-6 py-3.5 text-xs font-bold text-slate-500 uppercase tracking-wider text-center">DAYS</th>
+                  <th className="px-6 py-3.5 text-xs font-bold text-slate-500 uppercase tracking-wider text-left">AMOUNT</th>
                   <th className="px-6 py-3.5 text-xs font-bold text-slate-500 uppercase tracking-wider text-center">STATUS</th>
                   <th className="px-6 py-3.5 text-xs font-bold text-slate-500 uppercase tracking-wider">NOTE</th>
                 </tr>
@@ -546,103 +643,50 @@ function PayrollReport({ employees, shifts, departments = [] }) {
               <tbody className="divide-y divide-slate-100">
                 {displayData.map((row, idx) => (
                   <tr key={idx} className="hover:bg-slate-50/80 transition-colors">
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-3">
-                        <div className="w-9 h-9 bg-gradient-to-br from-blue-400 to-indigo-500 rounded-full flex items-center justify-center text-white text-xs font-bold">
-                          {row.name.split(' ').map(n => n[0]).join('').slice(0,2)}
-                        </div>
-                        <span className="font-semibold text-slate-800">{row.name}</span>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <span className="inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-medium bg-slate-100 text-slate-600">
-                        {row.department}
-                      </span>
-                    </td>
+                    <td className="px-6 py-4 font-semibold text-slate-800">{row.name}</td>
+                    <td className="px-6 py-4 text-sm text-slate-600 font-medium">{row.position}</td>
+                    <td className="px-6 py-4"><span className="px-2.5 py-1 rounded-lg text-xs font-medium bg-slate-100 text-slate-600">{row.department}</span></td>
                     <td className="px-6 py-4 text-slate-600 font-medium">{row.rate}</td>
-                    <td className="px-6 py-4 text-slate-600">{row.paymentDetails}</td>
-                    {!isMonthly && (
-                      <td className="px-6 py-4 text-center">
-                        <span className="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-blue-50 text-blue-700 font-semibold text-sm">
-                          {row.days}
-                        </span>
-                      </td>
-                    )}
-                    <td className="px-6 py-4 text-right">
-                      <div className="flex flex-col items-end">
-                        <span className={`text-lg font-bold ${row.isAmountHidden ? 'text-slate-400' : 'text-green-600'}`}>
-                          {row.isAmountHidden ? '₱ --.--' : `₱${row.amount.toLocaleString('en-PH', { minimumFractionDigits: 2 })}`}
-                        </span>
-                        {row.paidAmount > 0 && (
-                          <span className="text-[10px] text-slate-400 font-medium">
-                            Already Paid: ₱{row.paidAmount.toLocaleString('en-PH', { minimumFractionDigits: 2 })}
-                          </span>
-                        )}
+                    <td className="px-6 py-4 text-slate-600 text-xs">{row.paymentDetails}</td>
+                    <td className="px-6 py-4 text-center text-sm text-slate-600 font-medium">{row.days}</td>
+                    <td className="px-6 py-4 text-left">
+                      <div className="flex flex-col items-start">
+                        <span className={`text-lg font-bold ${row.isAmountHidden ? 'text-slate-400' : 'text-green-600'}`}>{row.isAmountHidden ? '₱ --.--' : `₱${row.amount.toLocaleString('en-PH', { minimumFractionDigits: 2 })}`}</span>
+                        {(row.status === 'PARTIAL' || row.status === 'PAID') && row.paidAmount > 0 && row.unpaidAmount > 0 && <span className="text-[10px] text-slate-400 font-medium">Remaining: ₱{row.unpaidAmount.toLocaleString('en-PH', { minimumFractionDigits: 2 })}</span>}
                       </div>
                     </td>
-                    <td className="px-6 py-4 text-center">
-                      <span className={`inline-flex items-center px-2.5 py-1.5 rounded-full text-xs font-semibold ${
-                        row.status === 'PAID' 
-                          ? 'bg-green-100 text-green-700' 
-                          : row.status === 'PARTIAL'
-                            ? 'bg-blue-100 text-blue-700'
-                            : (row.status === 'UNPAID' || row.isAmountHidden)
-                              ? 'bg-amber-100 text-amber-700'
-                              : 'bg-slate-100 text-slate-500'
-                      }`}>
-                        {row.isAmountHidden && row.status === 'UNPAID' ? 'PENDING' : row.status}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4">
-                      {editingNote === row.id ? (
-                        <div className="flex items-center gap-2">
-                          <input
-                            type="text"
-                            value={noteText}
-                            onChange={(e) => setNoteText(e.target.value)}
-                            className="px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/50 w-40"
-                            placeholder="Add note..."
-                            autoFocus
-                          />
-                          <button onClick={() => handleSaveNote(row.id, noteText)} className="text-green-600 hover:text-green-700 p-1">
-                            <RiCheckboxCircleLine className="w-5 h-5" />
-                          </button>
-                          <button onClick={() => setEditingNote(null)} className="text-slate-400 hover:text-slate-600 p-1">
-                            <RiCloseLine className="w-5 h-5" />
-                          </button>
-                        </div>
-                      ) : (
-                        <div className="flex items-center gap-2">
-                          <span className="text-sm text-slate-500 max-w-[180px] truncate">{row.note || '-'}</span>
-                          <button 
-                            onClick={() => startEditNote(row.id, row.note)} 
-                            className="text-slate-400 hover:text-blue-500 p-1 transition-colors"
-                          >
-                            <RiEditLine className="w-4 h-4" />
-                          </button>
-                        </div>
-                      )}
-                    </td>
+                    <td className="px-6 py-4 text-center"><span className={`px-2.5 py-1.5 rounded-full text-xs font-semibold ${row.status === 'PAID' ? 'bg-green-100 text-green-700' : row.status === 'PARTIAL' ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700'}`}>
+                      {row.isAmountHidden && row.status === 'UNPAID' ? 'PENDING' : 
+                       (row.status === 'PARTIAL' ? `PARTIAL (₱${row.unpaidAmount.toLocaleString()} left)` : row.status)}
+                    </span></td>
+                    <td className="px-6 py-4"><button onClick={() => openNotesModal(row.note, row.name, row.id)} className="text-sm text-slate-500 max-w-[180px] truncate hover:text-blue-600 text-left">{row.note || '-'}</button></td>
                   </tr>
                 ))}
               </tbody>
               <tfoot>
-                <tr className="bg-gradient-to-r from-slate-100 to-slate-50">
-                  <td className="px-6 py-4 font-bold text-slate-800" colSpan={isMonthly ? 5 : 6}>
-                    TOTAL ({displayData.length} employees)
-                  </td>
-                  <td className="px-6 py-4 text-right">
-                    <span className="text-xl font-bold text-green-700">
-                      ₱{totalAmount.toLocaleString('en-PH', { minimumFractionDigits: 2 })}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4" colSpan={isMonthly ? 1 : 1}></td>
+                <tr className="bg-slate-100">
+                  <td className="px-6 py-4 font-bold text-slate-800" colSpan={6}>TOTAL ({displayData.length} employees)</td>
+                  <td className="px-6 py-4 text-left font-bold text-green-700 text-xl">₱{totalAmount.toLocaleString('en-PH', { minimumFractionDigits: 2 })}</td>
+                  <td colSpan={2}></td>
                 </tr>
               </tfoot>
             </table>
           </div>
         )}
       </div>
+
+      {showNotesModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50" onClick={() => setShowNotesModal(false)}>
+          <div className="bg-white rounded-2xl p-6 w-full max-w-lg" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4"><h3 className="text-lg font-bold text-slate-800">Payroll Note</h3><button onClick={() => setShowNotesModal(false)}><RiCloseLine className="w-6 h-6" /></button></div>
+            <textarea value={selectedNotes} onChange={e => setSelectedNotes(e.target.value)} className="w-full border rounded-lg p-3 text-sm min-h-[150px] outline-none" placeholder="Type note here..." />
+            <div className="mt-6 flex gap-3">
+              <button onClick={() => setShowNotesModal(false)} className="flex-1 bg-slate-100 py-3 rounded-xl font-semibold">Cancel</button>
+              <button onClick={() => handleSaveNote(selectedEmployeeId, selectedNotes)} disabled={isSaving} className="flex-1 bg-blue-600 text-white py-3 rounded-xl font-semibold disabled:opacity-50">{isSaving ? 'Saving...' : 'Save Changes'}</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

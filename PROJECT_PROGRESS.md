@@ -34,9 +34,12 @@ Implement the \"Salary Loop\" feature for the DTR system and transition the work
 - [x] **Step 16**: Date Logic Overhaul - Implemented rolling cutoffs and fixed timezone-related date shifts by removing `toISOString()`.
 - [x] **Step 17**: Holiday/OT Correction - Standardized premium calculations (+100% Regular, +30% Special) across all components for all employee types.
 - [x] **Step 18**: Global Balance Logic - Management Table now shows total outstanding debt (all unpaid shifts), while Modal/Report remain cutoff-specific.
+- [x] **Step 19**: Monthly Salary Visibility & Payroll Report Enhancement - Implemented logic to hide monthly salaries until 1 day before the 2nd cutoff. Added Position column and combined Payment Method/Details in Payroll Report and CSV export.
+- [x] **Step 20**: NoteKey Synchronization - Standardized `noteKey` across Admin/Employee views to `second-YYYY-MM`, fixing a bug where monthly employees saw 'UNPAID' on their dashboard after being paid.
+- [x] **Step 21**: Professional Excel Export & Financial Transparency - Refactored Excel export into a multi-table format separated by department and cycle. Implemented logic to show **Total Gross Amount** (total obligation) while tracking **Remaining Balance** for partially paid employees. Added professional formatting (color-coded columns, centered alignment, text wrapping for notes).
 
 ## 🚧 In Progress
-- None. System is operational and stable.
+- Final validation of the multi-department Excel export in the production environment.
 
 ## 📋 Future Enhancements (Backlog)
 - [ ] **Monthly Holiday Verification**: Verify if monthly (output-based) employees should strictly receive only their fixed salary, or if they are entitled to holiday premiums on top of it. Current implementation adds premiums (+100%/+30%).
