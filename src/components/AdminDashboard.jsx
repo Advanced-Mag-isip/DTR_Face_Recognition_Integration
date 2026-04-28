@@ -164,6 +164,19 @@ function AdminDashboard() {
   };
 
   // Handlers
+  const refreshData = async () => {
+    try {
+      const [updatedEmployees, updatedShifts] = await Promise.all([
+        getUsers(),
+        getShifts()
+      ]);
+      setEmployees(updatedEmployees);
+      setShifts(updatedShifts);
+    } catch (err) {
+      console.error('Failed to refresh data:', err);
+    }
+  };
+
   const handleLogout = () => {
     logout();
     navigate('/login');
@@ -605,6 +618,7 @@ function AdminDashboard() {
         }}
         employees={employees}
         lockedEmployee={selectedEmployee}
+        onSuccess={refreshData}
       />
     </div>
   );

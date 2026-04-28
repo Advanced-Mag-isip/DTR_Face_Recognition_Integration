@@ -3,7 +3,7 @@ import { RiMoneyDollarCircleLine, RiCheckboxCircleLine, RiCloseLine, RiCheckboxB
 import { getUnpaidShifts, payShifts } from '../utils/salaryApi';
 import { calculateShiftPay } from '../utils/salaryCalculator';
 
-function PaySalaryModal({ isOpen, onClose, employees, lockedEmployee }) {
+function PaySalaryModal({ isOpen, onClose, employees, lockedEmployee, onSuccess }) {
   const [selectedEmployeeId, setSelectedEmployeeId] = useState('');
   const [selectedPeriod, setSelectedPeriod] = useState('second');
   const [selectedMonth, setSelectedMonth] = useState('');
@@ -58,6 +58,7 @@ function PaySalaryModal({ isOpen, onClose, employees, lockedEmployee }) {
         month: selectedMonth
       });
       setPaymentSuccess(result);
+      if (onSuccess) onSuccess(result);
     } catch (err) {
       console.error('Error paying shifts:', err);
       alert(err.response?.data?.message || 'Failed to process payment');

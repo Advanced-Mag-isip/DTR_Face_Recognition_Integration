@@ -69,7 +69,7 @@ function PayrollReport({ employees, shifts, departments = [] }) {
       
       return {
         label: `PAYROLL (FIRST HALF)`,
-        subtitle: `${monthStart.toLocaleDateString('en-PH', { month: 'long', year: 'numeric' })} - Ends ${secondFriday ? secondFriday.toLocaleDateString() : '2nd Friday'}`,
+        subtitle: `${startDate.toLocaleDateString('en-PH', { month: 'short', day: 'numeric' })} - ${secondFriday ? secondFriday.toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' }) : '2nd Friday'}`,
         startDate: formatDate(startDate),
         endDate: secondFriday ? formatDate(secondFriday) : formatDate(new Date(year, monthNum - 1, 15))
       };
@@ -82,14 +82,14 @@ function PayrollReport({ employees, shifts, departments = [] }) {
       
       return {
         label: `PAYROLL (SECOND HALF)`,
-        subtitle: `${monthStart.toLocaleDateString('en-PH', { month: 'long', year: 'numeric' })} - Ends ${lastFriday ? lastFriday.toLocaleDateString() : 'Last Friday'}`,
+        subtitle: `${startDate.toLocaleDateString('en-PH', { month: 'short', day: 'numeric' })} - ${lastFriday ? lastFriday.toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' }) : 'Last Friday'}`,
         startDate: formatDate(startDate),
         endDate: lastFriday ? formatDate(lastFriday) : formatDate(monthEnd)
       };
     } else {
       return {
         label: `PAYROLL - MONTHLY`,
-        subtitle: `${monthStart.toLocaleDateString('en-PH', { month: 'long', year: 'numeric' })} - Monthly Rate`,
+        subtitle: `${monthStart.toLocaleDateString('en-PH', { month: 'long', year: 'numeric' })} - Full Month`,
         startDate: formatDate(monthStart),
         endDate: formatDate(monthEnd)
       };
@@ -111,10 +111,12 @@ function PayrollReport({ employees, shifts, departments = [] }) {
       const hourlyEmployees = filteredEmployees
         .filter(emp => emp.isActive !== false && (emp.paymentType === 'hourly' || !emp.paymentType))
         .map(emp => {
+          // Strictly filter shifts within the range AND unpaid
+          // OR shifts that are in the range AND already paid
           const empShifts = shifts.filter(s => 
             s.employeeId === emp.id && 
-            s.date <= endDate &&
-            (s.date >= startDate || !s.isPaid)
+            s.date >= startDate &&
+            s.date <= endDate
           );
           
           const dailySalary = parseFloat(emp.dailySalary) || 0;
@@ -125,7 +127,9 @@ function PayrollReport({ employees, shifts, departments = [] }) {
           const daysWorked = empShifts.length;
           const paidShifts = empShifts.filter(s => s.isPaid);
           const unpaidShifts = empShifts.filter(s => !s.isPaid);
-          let amount = 0;
+          
+          let unpaidAmount = 0;
+          let paidAmount = 0;
           let overtimeHours = 0;
           let holidayNote = '';
           
@@ -135,9 +139,15 @@ function PayrollReport({ employees, shifts, departments = [] }) {
             holidayNote = holidays.join(', ');
           }
           
-          empShifts.forEach(shift => {
+          // Calculate Unpaid Amount
+          unpaidShifts.forEach(shift => {
             overtimeHours += shift.overtimeHours || 0;
-            amount += calculateShiftPay(shift, effectiveHourlyRate, overtimeHourlyRate);
+            unpaidAmount += calculateShiftPay(shift, effectiveHourlyRate, overtimeHourlyRate);
+          });
+
+          // Calculate Paid Amount
+          paidShifts.forEach(shift => {
+            paidAmount += calculateShiftPay(shift, effectiveHourlyRate, overtimeHourlyRate);
           });
           
           return {
@@ -147,10 +157,13 @@ function PayrollReport({ employees, shifts, departments = [] }) {
             rate: hourlyRate > 0 ? `${hourlyRate}/hr` : (dailySalary > 0 ? `${dailySalary}/day` : '-'),
             paymentDetails: emp.paymentDetails || emp.paymentMethod || '-',
             days: daysWorked,
-            paidDays: paidShifts.length,
+            unpaidDays: unpaidShifts.length,
             adjustments: '',
-            amount: parseFloat(amount.toFixed(2)),
-            status: paidShifts.length === daysWorked && daysWorked > 0 ? 'PAID' : unpaidShifts.length > 0 ? 'UNPAID' : '-',
+            amount: parseFloat(unpaidAmount.toFixed(2)),
+            paidAmount: parseFloat(paidAmount.toFixed(2)),
+            status: (unpaidShifts.length === 0 && daysWorked > 0) ? 'PAID' : 
+                    (paidShifts.length > 0 && unpaidShifts.length > 0) ? 'PARTIAL' :
+                    unpaidShifts.length > 0 ? 'UNPAID' : '-',
             note: (() => {
             let savedNotes = {};
             try {
@@ -178,6 +191,7 @@ function PayrollReport({ employees, shifts, departments = [] }) {
               paymentDetails: emp.paymentDetails || emp.paymentMethod || '-',
               adjustments: '',
               amount: 0,
+              paidAmount: 0,
               status: '-',
               note: 'Paid at 2nd Cut-off'
             };
@@ -187,6 +201,9 @@ function PayrollReport({ employees, shifts, departments = [] }) {
             s.employeeId === emp.id && 
             s.date <= endDate
           );
+          
+          const paidShifts = empShifts.filter(s => s.isPaid);
+          const unpaidShifts = empShifts.filter(s => !s.isPaid);
           
           let overtimeHours = 0;
           let holidayPremium = 0;
@@ -212,13 +229,9 @@ function PayrollReport({ employees, shifts, departments = [] }) {
             }
           });
           
-          console.log(`%c[DEBUG Report Details] ${emp.firstName}: Found ${empShifts.length} shifts. OT Hours: ${overtimeHours}, Holiday Premium: ${holidayPremium}`, "color: white; background: navy; padding: 2px;");
-
           const overtimePay = overtimeHours * overtimeHourlyRate;
-          const totalAmount = parseFloat((monthlySalary + overtimePay + holidayPremium).toFixed(2));
+          const totalGross = parseFloat((monthlySalary + overtimePay + holidayPremium).toFixed(2));
           
-          console.log(`%c[DEBUG Report] ${emp.firstName}: Base=${monthlySalary}, OT=${overtimePay}, Holiday=${holidayPremium}, Total=${totalAmount}`, "color: white; background: blue; font-weight: bold; padding: 2px 4px; border-radius: 2px;");
-
           let savedNotes = {};
           try {
             if (emp.payrollNotes) {
@@ -229,7 +242,10 @@ function PayrollReport({ employees, shifts, departments = [] }) {
           const noteKey = `${selectedCycle}-${selectedMonth}`;
           const isPaidNote = savedNotes[noteKey] === 'PAID';
           const allShiftsPaid = empShifts.length > 0 && empShifts.every(s => s.isPaid);
+          const someShiftsPaid = empShifts.some(s => s.isPaid);
           
+          const isFullPaid = isPaidNote || allShiftsPaid;
+
           return {
             id: emp.id,
             name: emp.firstName && emp.lastName ? `${emp.firstName} ${emp.lastName}` : emp.employeeId,
@@ -237,8 +253,9 @@ function PayrollReport({ employees, shifts, departments = [] }) {
             rate: `${monthlySalary.toLocaleString()}/month`,
             paymentDetails: emp.paymentDetails || emp.paymentMethod || '-',
             adjustments: '',
-            amount: totalAmount,
-            status: (isPaidNote || allShiftsPaid) ? 'PAID' : 'UNPAID',
+            amount: isFullPaid ? 0 : totalGross,
+            paidAmount: isFullPaid ? totalGross : 0,
+            status: isFullPaid ? 'PAID' : (someShiftsPaid ? 'PARTIAL' : 'UNPAID'),
             note: savedNotes[noteKey] || (holidayNote ? `${holidayNote}${overtimeHours > 0 ? ' + OT' : ''}` : overtimeHours > 0 ? `${overtimeHours} OT hours` : '')
           };
         });
@@ -518,17 +535,26 @@ function PayrollReport({ employees, shifts, departments = [] }) {
                       </td>
                     )}
                     <td className="px-6 py-4 text-right">
-                      <span className="text-lg font-bold text-green-600">
-                        ₱{row.amount.toLocaleString('en-PH', { minimumFractionDigits: 2 })}
-                      </span>
+                      <div className="flex flex-col items-end">
+                        <span className="text-lg font-bold text-green-600">
+                          ₱{row.amount.toLocaleString('en-PH', { minimumFractionDigits: 2 })}
+                        </span>
+                        {row.paidAmount > 0 && (
+                          <span className="text-[10px] text-slate-400 font-medium">
+                            Already Paid: ₱{row.paidAmount.toLocaleString('en-PH', { minimumFractionDigits: 2 })}
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className="px-6 py-4 text-center">
                       <span className={`inline-flex items-center px-2.5 py-1.5 rounded-full text-xs font-semibold ${
                         row.status === 'PAID' 
                           ? 'bg-green-100 text-green-700' 
-                          : row.status === 'UNPAID'
-                            ? 'bg-amber-100 text-amber-700'
-                            : 'bg-slate-100 text-slate-500'
+                          : row.status === 'PARTIAL'
+                            ? 'bg-blue-100 text-blue-700'
+                            : row.status === 'UNPAID'
+                              ? 'bg-amber-100 text-amber-700'
+                              : 'bg-slate-100 text-slate-500'
                       }`}>
                         {row.status}
                       </span>
