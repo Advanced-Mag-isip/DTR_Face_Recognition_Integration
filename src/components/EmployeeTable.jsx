@@ -71,8 +71,47 @@ function EmployeeTable({
   };
 
   const shouldShowRemainingSalary = (emp) => {
-    // Always show remaining salary for active employees if they have unpaid shifts
-    return !!emp;
+    if (!emp) return { show: false };
+    
+    const paymentType = emp.paymentType || 'hourly';
+    const isMonthly = paymentType === 'monthly' || (parseFloat(emp.monthlySalary) > 0);
+    
+    if (!isMonthly) return { show: true };
+
+    // Monthly Logic: Only show 1 day before payment date (Last Friday)
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    const currentMonthNum = now.getMonth() + 1;
+    
+    let targetYear, targetMonth;
+    if (currentMonth) {
+      [targetYear, targetMonth] = currentMonth.split('-').map(Number);
+    } else {
+      targetYear = currentYear;
+      targetMonth = currentMonthNum;
+    }
+
+    const fridays = getFridaysInMonth(targetYear, targetMonth);
+    if (fridays.length === 0) return { show: true };
+
+    const lastFriday = fridays[fridays.length - 1];
+    const paymentDate = new Date(lastFriday);
+    
+    // Visibility starts 1 day before payment date
+    const visibilityDate = new Date(paymentDate);
+    visibilityDate.setDate(paymentDate.getDate() - 1);
+    visibilityDate.setHours(0, 0, 0, 0);
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const isFutureMonth = targetYear > currentYear || (targetYear === currentYear && targetMonth > currentMonthNum);
+    
+    if (isFutureMonth || today < visibilityDate) {
+      return { show: false, isPending: true };
+    }
+
+    return { show: true };
   };
 
   if (loading) {
@@ -159,10 +198,12 @@ function EmployeeTable({
                     <span className="text-sm text-slate-600 font-medium">{salaryDisplay || '-'}</span>
                   </td>
                   <td className="px-4 py-4">
-                    {showRemaining && remaining > 0 ? (
+                    {showRemaining.show && remaining > 0 ? (
                       <span className="text-sm font-semibold text-amber-600">₱{remaining.toFixed(2)}</span>
-                    ) : showRemaining ? (
+                    ) : showRemaining.show ? (
                       <span className="text-sm text-slate-500 font-medium">₱0.00</span>
+                    ) : showRemaining.isPending ? (
+                      <span className="text-xs font-semibold text-amber-500 uppercase tracking-tight">Pending</span>
                     ) : (
                       <span className="text-xs text-slate-400">--</span>
                     )}

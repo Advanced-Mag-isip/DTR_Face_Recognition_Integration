@@ -1,14 +1,75 @@
 import { useState, useEffect } from 'react';
 import { RiMoneyDollarCircleLine, RiCalendarCheckLine, RiTimeLine, RiBankCardLine } from 'react-icons/ri';
 import { RiInformationLine } from 'react-icons/ri';
-import { getCurrentMonthRange } from '../utils/dateUtils';
+import { getCurrentMonthRange, getFridaysInMonth } from '../utils/dateUtils';
 import { getSalaryForPeriod } from '../utils/salaryApi';
 import { calculateShiftPay } from '../utils/salaryCalculator';
+import { useAuth } from '../context/AuthContext';
 
 function SalaryReport({ dailySalary, overtimeHourlyRate, shifts, employeeId, paymentType, hourlyRate: propHourlyRate, monthlySalary: propMonthlySalary, paymentMethod, paymentDetails, payrollNotes, selectedMonth }) {
+  const { user: currentUser } = useAuth();
   const [salaryData, setSalaryData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [showBreakdown, setShowBreakdown] = useState(false);
+  const [isSalaryHidden, setIsSalaryHidden] = useState(false);
+
+  useEffect(() => {
+    // Check if salary should be hidden (Monthly only, 1 day before Last Friday)
+    const checkVisibility = () => {
+      const payType = paymentType || (salaryData?.paymentType) || 'hourly';
+      if (payType !== 'monthly') {
+        setIsSalaryHidden(false);
+        return;
+      }
+
+      // If Admin is viewing, don't hide it (optional based on interpretation, but usually admins need to see it)
+      // However, the instruction "monthly unpaid salary will only be shown 1 day before payment date" 
+      // is a strict mandate from the boss, so I'll apply it but maybe allow Admins to see? 
+      // "Employee management remaining column" implies even Admins shouldn't see it until then if they are looking at the table.
+      // Let's stick to the strict rule: hidden until 1 day before.
+      
+      const now = new Date();
+      const currentYear = now.getFullYear();
+      const currentMonthNum = now.getMonth() + 1;
+      
+      let targetYear, targetMonth;
+      if (selectedMonth) {
+        [targetYear, targetMonth] = selectedMonth.split('-').map(Number);
+      } else {
+        targetYear = currentYear;
+        targetMonth = currentMonthNum;
+      }
+
+      const fridays = getFridaysInMonth(targetYear, targetMonth);
+      if (fridays.length === 0) {
+        setIsSalaryHidden(false);
+        return;
+      }
+
+      const lastFriday = fridays[fridays.length - 1];
+      const paymentDate = new Date(lastFriday);
+      
+      // Calculate 1 day before payment date
+      const visibilityDate = new Date(paymentDate);
+      visibilityDate.setDate(paymentDate.getDate() - 1);
+      visibilityDate.setHours(0, 0, 0, 0);
+
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+
+      // Hide if today is BEFORE the visibility date
+      // Also hide if we are looking at a FUTURE month
+      const isFutureMonth = targetYear > currentYear || (targetYear === currentYear && targetMonth > currentMonthNum);
+      
+      if (isFutureMonth || today < visibilityDate) {
+        setIsSalaryHidden(true);
+      } else {
+        setIsSalaryHidden(false);
+      }
+    };
+
+    checkVisibility();
+  }, [paymentType, salaryData, selectedMonth]);
 
   useEffect(() => {
     const fetchSalaryData = async () => {
@@ -218,7 +279,7 @@ function SalaryReport({ dailySalary, overtimeHourlyRate, shifts, employeeId, pay
             paymentStatus.status === 'PARTIAL' ? 'bg-blue-100 text-blue-700' :
             'bg-amber-100 text-amber-700'
           }`}>
-            {paymentStatus.status}
+            {isSalaryHidden && paymentStatus.status === 'UNPAID' ? 'PENDING' : paymentStatus.status}
           </span>
         </div>
         <div className="flex items-center gap-2">
@@ -284,7 +345,9 @@ function SalaryReport({ dailySalary, overtimeHourlyRate, shifts, employeeId, pay
         </div>
         <div className="bg-amber-50 border border-amber-100 p-3 rounded-lg">
           <p className="text-[10px] text-amber-600 font-bold uppercase tracking-wider mb-1">Remaining Balance</p>
-          <p className="text-lg font-bold text-amber-700">₱{paymentStatus.unpaidAmount.toLocaleString('en-PH', { minimumFractionDigits: 2 })}</p>
+          <p className="text-lg font-bold text-amber-700">
+            {isSalaryHidden && paymentStatus.status === 'UNPAID' ? '₱ --.--' : `₱${paymentStatus.unpaidAmount.toLocaleString('en-PH', { minimumFractionDigits: 2 })}`}
+          </p>
         </div>
       </div>
 

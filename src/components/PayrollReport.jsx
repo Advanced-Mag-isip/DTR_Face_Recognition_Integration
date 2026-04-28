@@ -11,6 +11,7 @@ function PayrollReport({ employees, shifts, departments = [] }) {
   const [loading, setLoading] = useState(false);
   const [editingNote, setEditingNote] = useState(null);
   const [noteText, setNoteText] = useState('');
+  const [hiddenAmountCount, setHiddenAmountCount] = useState(0);
 
   useEffect(() => {
     const now = new Date();
@@ -29,6 +30,33 @@ function PayrollReport({ employees, shifts, departments = [] }) {
       }
     }
     return fridays;
+  };
+
+  const isMonthlyAmountHidden = (monthStr) => {
+    if (!monthStr) return false;
+    
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    const currentMonthNum = now.getMonth() + 1;
+    
+    const [targetYear, targetMonth] = monthStr.split('-').map(Number);
+    const fridays = getFridaysInMonth(targetYear, targetMonth);
+    if (fridays.length === 0) return false;
+
+    const lastFriday = fridays[fridays.length - 1];
+    const paymentDate = new Date(lastFriday);
+    
+    // Visibility starts 1 day before payment date
+    const visibilityDate = new Date(paymentDate);
+    visibilityDate.setDate(paymentDate.getDate() - 1);
+    visibilityDate.setHours(0, 0, 0, 0);
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const isFutureMonth = targetYear > currentYear || (targetYear === currentYear && targetMonth > currentMonthNum);
+    
+    return isFutureMonth || today < visibilityDate;
   };
 
   const getCycleDates = (cycle, month) => {
@@ -103,6 +131,8 @@ function PayrollReport({ employees, shifts, departments = [] }) {
       const dates = getCycleDates(selectedCycle, selectedMonth);
       const startDate = dates.startDate;
       const endDate = dates.endDate;
+      const shouldHideMonthly = isMonthlyAmountHidden(selectedMonth);
+      let hideCount = 0;
       
       const filteredEmployees = selectedDepartment === 'all' 
         ? employees 
@@ -245,6 +275,8 @@ function PayrollReport({ employees, shifts, departments = [] }) {
           const someShiftsPaid = empShifts.some(s => s.isPaid);
           
           const isFullPaid = isPaidNote || allShiftsPaid;
+          const isAmountHidden = shouldHideMonthly && !isFullPaid && (totalGross > 0);
+          if (isAmountHidden) hideCount++;
 
           return {
             id: emp.id,
@@ -256,11 +288,13 @@ function PayrollReport({ employees, shifts, departments = [] }) {
             amount: isFullPaid ? 0 : totalGross,
             paidAmount: isFullPaid ? totalGross : 0,
             status: isFullPaid ? 'PAID' : (someShiftsPaid ? 'PARTIAL' : 'UNPAID'),
+            isAmountHidden,
             note: savedNotes[noteKey] || (holidayNote ? `${holidayNote}${overtimeHours > 0 ? ' + OT' : ''}` : overtimeHours > 0 ? `${overtimeHours} OT hours` : '')
           };
         });
       
       setReportData({ hourly: hourlyEmployees, monthly: monthlyEmployees });
+      setHiddenAmountCount(hideCount);
     } catch (err) {
       console.error('Error generating report:', err);
     } finally {
@@ -536,8 +570,8 @@ function PayrollReport({ employees, shifts, departments = [] }) {
                     )}
                     <td className="px-6 py-4 text-right">
                       <div className="flex flex-col items-end">
-                        <span className="text-lg font-bold text-green-600">
-                          ₱{row.amount.toLocaleString('en-PH', { minimumFractionDigits: 2 })}
+                        <span className={`text-lg font-bold ${row.isAmountHidden ? 'text-slate-400' : 'text-green-600'}`}>
+                          {row.isAmountHidden ? '₱ --.--' : `₱${row.amount.toLocaleString('en-PH', { minimumFractionDigits: 2 })}`}
                         </span>
                         {row.paidAmount > 0 && (
                           <span className="text-[10px] text-slate-400 font-medium">
@@ -552,11 +586,11 @@ function PayrollReport({ employees, shifts, departments = [] }) {
                           ? 'bg-green-100 text-green-700' 
                           : row.status === 'PARTIAL'
                             ? 'bg-blue-100 text-blue-700'
-                            : row.status === 'UNPAID'
+                            : (row.status === 'UNPAID' || row.isAmountHidden)
                               ? 'bg-amber-100 text-amber-700'
                               : 'bg-slate-100 text-slate-500'
                       }`}>
-                        {row.status}
+                        {row.isAmountHidden && row.status === 'UNPAID' ? 'PENDING' : row.status}
                       </span>
                     </td>
                     <td className="px-6 py-4">
