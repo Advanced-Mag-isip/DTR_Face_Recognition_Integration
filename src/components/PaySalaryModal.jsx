@@ -129,7 +129,6 @@ function PaySalaryModal({ isOpen, onClose, employees, lockedEmployee, onSuccess 
       });
       
       const finalTotal = monthlySalary + overtimeTotal + holidayPremiumTotal;
-      console.log(`%c[DEBUG Modal] Base=${monthlySalary}, OT=${overtimeTotal}, Holiday=${holidayPremiumTotal}, Total=${finalTotal}`, "color: white; background: green; font-weight: bold; padding: 2px 4px; border-radius: 2px;");
       
       // Full Fixed Monthly Salary + Extras
       total = finalTotal;

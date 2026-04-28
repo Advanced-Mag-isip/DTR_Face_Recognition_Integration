@@ -39,18 +39,15 @@ const checkHoliday = async (date) => {
 router.post('/', protect, async (req, res) => {
     const { date, morningIn, morningOut, afternoonIn, afternoonOut, overtimeStart, overtimeEnd, employeeId, notes } = req.body;
 
-    console.log('POST /shifts received:', { date, employeeId, admin: req.user.role });
+
 
     try {
         // Determine whose shift it is (admin can create for others)
         const targetEmployeeId = (req.user.role === 'admin' && employeeId) ? employeeId : req.user.id;
 
-        console.log('Creating shift for targetEmployeeId:', targetEmployeeId);
-
         // Verify employee exists
         const employee = await User.findByPk(targetEmployeeId);
         if (!employee) {
-            console.log('Employee not found:', targetEmployeeId);
             return res.status(404).json({ message: 'Employee not found' });
         }
 
@@ -62,7 +59,6 @@ router.post('/', protect, async (req, res) => {
         });
 
         if (existing) {
-            console.log('Shift already exists for this date');
             return res.status(400).json({ message: 'A shift for this day already exists.' });
         }
 
@@ -175,8 +171,6 @@ router.get('/', protect, async (req, res) => {
 router.put('/:id', protect, async (req, res) => {
     const { date, morningIn, morningOut, afternoonIn, afternoonOut, overtimeStart, overtimeEnd, notes } = req.body;
 
-    console.log('PUT /shifts/:id received:', req.params.id, req.body);
-
     try {
         const shift = await Shift.findByPk(req.params.id);
 
@@ -199,7 +193,6 @@ router.put('/:id', protect, async (req, res) => {
         });
 
         if (existing) {
-            console.log('Shift already exists for this date');
             return res.status(400).json({ message: 'A shift for this day already exists.' });
         }
 
@@ -233,8 +226,6 @@ router.put('/:id', protect, async (req, res) => {
         shift.holidayName = holidayInfo.holidayName;
 
         await shift.save();
-
-        console.log('Shift updated successfully:', shift.id);
 
         res.json({
             id: shift.id,

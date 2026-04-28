@@ -60,9 +60,6 @@ app.use((req, res, next) => {
 
 sequelize.sync()
     .then(() => {
-        console.log('Database connected and models synced');
-        app.listen(PORT, () =>
-            console.log(`Server running on port ${PORT}`)
-        );
+        app.listen(PORT, () => {});
     })
     .catch((err) => console.error('Database connection error:', err));

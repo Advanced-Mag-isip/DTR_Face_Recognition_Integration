@@ -56,13 +56,6 @@ sequelize.sync({ alter: true }).then(async () => {
         overtimeHourlyRate: 0
     });
 
-    console.log('Users seeded successfully:');
-    console.log('  Admin: ADMIN-001 / admin123 (Daily Salary: ₱2,727.27 | Hourly: ₱340.91/hr)');
-    console.log('  Employee: EMP-001 / employee123 (Daily Salary: ₱2,272.73 | Hourly: ₱284.09/hr)');
-    console.log('Departments seeded successfully:');
-    departments.forEach(([dept]) => {
-        console.log(`  - ${dept.name}: ${dept.description || 'No description'}`);
-    });
     process.exit();
 }).catch(err => {
     console.error('Seeding error:', err);

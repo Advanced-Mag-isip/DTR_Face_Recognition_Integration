@@ -441,18 +441,6 @@ router.get('/unpaid', protect, async (req, res) => {
       order: [['date', 'DESC']]
     });
 
-    // Debug logging
-    console.log('=== API Unpaid Debug ===');
-    console.log('Employee ID:', targetId);
-    console.log('Pay Period:', payPeriod);
-    console.log('Month:', month);
-    console.log('Date Range:', whereClause.date);
-    console.log('Total Unpaid Shifts:', shifts.length);
-    if (shifts.length > 0) {
-      console.log('Shift Dates:', shifts.map(s => s.date).sort());
-    }
-    console.log('==================');
-
     const hourlyRate = parseFloat(user.hourlyRate) || 0;
     const monthlySalary = parseFloat(user.monthlySalary) || 0;
     const dailySalary = parseFloat(user.dailySalary) || 0;

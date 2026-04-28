@@ -53,7 +53,6 @@ function EmployeeTable({
       });
 
       const finalTotal = baseSalary + overtimeTotal + holidayPremiumTotal;
-      console.log(`%c[DEBUG Table] ${emp.firstName}: Base=${baseSalary}, OT=${overtimeTotal}, Holiday=${holidayPremiumTotal}, Total=${finalTotal}`, "color: white; background: darkorange; font-weight: bold; padding: 2px 4px; border-radius: 2px;");
       return finalTotal;
     } else {
       // For hourly/daily employees: Sum of all unpaid shifts
