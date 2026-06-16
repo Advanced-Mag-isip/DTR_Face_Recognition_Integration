@@ -11,6 +11,8 @@ node_modules
 dist
 dist-ssr
 *.local
+face-service/__pycache__/
+face-service/*.pyc
 
 # Environment variables
 .env
@@ -26,3 +28,11 @@ backend/.env
 *.njsproj
 *.sln
 *.sw?
+
+# Python virtual environment
+venv/
+env/
+.venv/
+
+backend/storage/faces/
+backend/storage/temp/

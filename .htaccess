@@ -1,0 +1,10 @@
+RewriteEngine On
+RewriteBase /
+
+# Redirect API requests to backend
+RewriteRule ^api/(.*)$ http://localhost:3001/api/$1 [P,L]
+
+# Handle React Router (send all requests to index.html)
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule ^.*$ /index.html [L]

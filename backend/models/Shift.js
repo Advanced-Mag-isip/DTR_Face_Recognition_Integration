@@ -78,6 +78,16 @@ const Shift = sequelize.define('Shift', {
     paidAt: {
         type: DataTypes.DATE,
         allowNull: true,
+    },
+    faceVerified: {
+        type: DataTypes.BOOLEAN,
+        allowNull: true,
+        defaultValue: false,
+    },
+    faceCheckMethod: {
+        type: DataTypes.STRING,
+        allowNull: true,
+        defaultValue: null,
     }
 }, {
     timestamps: true,

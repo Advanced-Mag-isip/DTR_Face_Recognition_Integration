@@ -118,6 +118,24 @@ function ShiftTable({ data, onEdit, onDelete, dailySalary, overtimeHourlyRate, p
     );
   };
 
+  const getFaceVerifiedBadge = (shift) => {
+    if (shift.faceVerified) {
+      return (
+        <span className="inline-flex items-center gap-1 px-2 py-1 bg-green-100 text-green-700 text-xs font-medium rounded-lg">
+          <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+            <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+          </svg>
+          Verified
+        </span>
+      );
+    }
+    return (
+      <span className="inline-flex items-center gap-1 px-2 py-1 bg-slate-100 text-slate-500 text-xs font-medium rounded-lg">
+        Manual
+      </span>
+    );
+  };
+
   if (data.length === 0) {
     return (
       <div className="text-center py-12 text-slate-400 text-sm">
@@ -125,171 +143,179 @@ function ShiftTable({ data, onEdit, onDelete, dailySalary, overtimeHourlyRate, p
       </div>
     );
   }
+
   return (
     <>
       <div className="overflow-x-auto">
         <table className="w-full">
-        <thead>
-          <tr className="bg-slate-50 text-left">
-            <th className="px-4 py-4 text-sm font-semibold text-slate-700 rounded-tl-xl">Date</th>
-            <th className="px-4 py-4 text-sm font-semibold text-slate-700">Morning</th>
-            <th className="px-4 py-4 text-sm font-semibold text-slate-700">Afternoon</th>
-            <th className="px-4 py-4 text-sm font-semibold text-slate-700">Overtime</th>
-            <th className="px-4 py-4 text-sm font-semibold text-slate-700">Total Hours</th>
-            <th className="px-4 py-4 text-sm font-semibold text-slate-700">Status</th>
-            <th className="px-4 py-4 text-sm font-semibold text-slate-700">Notes</th>
-            <th className="px-4 py-4 text-sm font-semibold text-slate-700">Shift Salary</th>
-            <th className="px-4 py-4 text-sm font-semibold text-slate-700 rounded-tr-xl">Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          {data.map((shift) => {
-            const salary = calculateShiftSalary(shift);
-            return (
-              <tr key={shift.id} className="border-b border-slate-100 hover:bg-slate-50 transition-colors">
-                <td className="px-4 py-4 text-sm text-slate-700">
-                  <div>{formatDate(shift.date)}</div>
-                  {getHolidayBadge(shift)}
-                </td>
-                <td className="px-4 py-4">
-                  <div className="text-sm text-slate-700">{formatTime(shift.morningTimeIn)} - {formatTime(shift.morningTimeOut)}</div>
-                  <div className="text-xs text-slate-500">{shift.morningHours} hrs</div>
-                </td>
-                <td className="px-4 py-4">
-                  <div className="text-sm text-slate-700">{formatTime(shift.afternoonTimeIn)} - {formatTime(shift.afternoonTimeOut)}</div>
-                  <div className="text-xs text-slate-500">{shift.afternoonHours} hrs</div>
-                </td>
-                <td className="px-4 py-4">
-                  {shift.overtimeTimeIn ? (
-                    <>
-                      <div className="text-sm text-slate-700">
-                        {formatTime(shift.overtimeTimeIn)} - {formatTime(shift.overtimeTimeOut)}
+          <thead>
+            <tr className="bg-slate-50 text-left">
+              <th className="px-4 py-4 text-sm font-semibold text-slate-700 rounded-tl-xl">Date</th>
+              <th className="px-4 py-4 text-sm font-semibold text-slate-700">Morning</th>
+              <th className="px-4 py-4 text-sm font-semibold text-slate-700">Afternoon</th>
+              <th className="px-4 py-4 text-sm font-semibold text-slate-700">Overtime</th>
+              <th className="px-4 py-4 text-sm font-semibold text-slate-700">Total Hours</th>
+              <th className="px-4 py-4 text-sm font-semibold text-slate-700">Verification</th>
+              <th className="px-4 py-4 text-sm font-semibold text-slate-700">Status</th>
+              <th className="px-4 py-4 text-sm font-semibold text-slate-700">Notes</th>
+              <th className="px-4 py-4 text-sm font-semibold text-slate-700">Shift Salary</th>
+              <th className="px-4 py-4 text-sm font-semibold text-slate-700 rounded-tr-xl">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {data.map((shift) => {
+              const salary = calculateShiftSalary(shift);
+              return (
+                <tr key={shift.id} className="border-b border-slate-100 hover:bg-slate-50 transition-colors">
+                  <td className="px-4 py-4 text-sm text-slate-700">
+                    <div>{formatDate(shift.date)}</div>
+                    {getHolidayBadge(shift)}
+                  </td>
+                  <td className="px-4 py-4">
+                    <div className="text-sm text-slate-700">{formatTime(shift.morningTimeIn)} - {formatTime(shift.morningTimeOut)}</div>
+                    <div className="text-xs text-slate-500">{shift.morningHours} hrs</div>
+                  </td>
+                  <td className="px-4 py-4">
+                    <div className="text-sm text-slate-700">{formatTime(shift.afternoonTimeIn)} - {formatTime(shift.afternoonTimeOut)}</div>
+                    <div className="text-xs text-slate-500">{shift.afternoonHours} hrs</div>
+                  </td>
+                  <td className="px-4 py-4">
+                    {shift.overtimeTimeIn ? (
+                      <>
+                        <div className="text-sm text-slate-700">
+                          {formatTime(shift.overtimeTimeIn)} - {formatTime(shift.overtimeTimeOut)}
+                        </div>
+                        <div className="text-xs text-slate-500">{shift.overtimeHours} hrs</div>
+                      </>
+                    ) : (
+                      <span className="text-xs text-slate-400">No overtime</span>
+                    )}
+                  </td>
+                  <td className="px-4 py-4 text-sm font-bold text-slate-800">{shift.totalHours} hrs</td>
+
+                  {/* ── Face verified column ── */}
+                  <td className="px-4 py-4">
+                    {getFaceVerifiedBadge(shift)}
+                  </td>
+
+                  <td className="px-4 py-4">
+                    {shift.isPaid ? (
+                      <span className="inline-flex items-center gap-1 px-2 py-1 bg-green-100 text-green-700 text-xs font-medium rounded-lg">
+                        <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                        </svg>
+                        Paid
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 px-2 py-1 bg-amber-100 text-amber-700 text-xs font-medium rounded-lg">
+                        Unpaid
+                      </span>
+                    )}
+                  </td>
+                  <td className="px-4 py-4">
+                    {shift.notes ? (
+                      <button
+                        onClick={() => openNotesModal(shift.notes, shift)}
+                        className="text-sm text-slate-700 max-w-[200px] line-clamp-2 hover:text-primary hover:underline text-left transition-colors"
+                      >
+                        {shift.notes}
+                      </button>
+                    ) : (
+                      <span className="text-xs text-slate-400">—</span>
+                    )}
+                  </td>
+                  <td className="px-4 py-4">
+                    {salary ? (
+                      <div className="text-sm">
+                        <div className="font-semibold text-green-600">₱{salary.totalShiftPay.toFixed(2)}</div>
+                        {salary.overtimeHours > 0 && (
+                          <div className="text-xs text-slate-400">
+                            OT: ₱{salary.overtimePay.toFixed(2)}
+                          </div>
+                        )}
+                        {salary.isHoliday && salary.holidayPremium > 0 && (
+                          <div className="text-xs text-orange-600 font-medium">
+                            Holiday premium: +₱{salary.holidayPremium.toFixed(2)}
+                          </div>
+                        )}
                       </div>
-                      <div className="text-xs text-slate-500">{shift.overtimeHours} hrs</div>
-                    </>
-                  ) : (
-                    <span className="text-xs text-slate-400">No overtime</span>
-                  )}
-                </td>
-                <td className="px-4 py-4 text-sm font-bold text-slate-800">{shift.totalHours} hrs</td>
-                <td className="px-4 py-4">
-                  {shift.isPaid ? (
-                    <span className="inline-flex items-center gap-1 px-2 py-1 bg-green-100 text-green-700 text-xs font-medium rounded-lg">
-                      <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
-                        <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                      </svg>
-                      Paid
-                    </span>
-                  ) : (
-                    <span className="inline-flex items-center gap-1 px-2 py-1 bg-amber-100 text-amber-700 text-xs font-medium rounded-lg">
-                      Unpaid
-                    </span>
-                  )}
-                </td>
-                <td className="px-4 py-4">
-                  {shift.notes ? (
-                    <button
-                      onClick={() => openNotesModal(shift.notes, shift)}
-                      className="text-sm text-slate-700 max-w-[200px] line-clamp-2 hover:text-primary hover:underline text-left transition-colors"
-                    >
-                      {shift.notes}
-                    </button>
-                  ) : (
-                    <span className="text-xs text-slate-400">—</span>
-                  )}
-                </td>
-                <td className="px-4 py-4">
-                  {salary ? (
-                    <div className="text-sm">
-                      <div className="font-semibold text-green-600">₱{salary.totalShiftPay.toFixed(2)}</div>
-                      {salary.overtimeHours > 0 && (
-                        <div className="text-xs text-slate-400">
-                          OT: ₱{salary.overtimePay.toFixed(2)}
-                        </div>
-                      )}
-                      {salary.isHoliday && salary.holidayPremium > 0 && (
-                        <div className="text-xs text-orange-600 font-medium">
-                          Holiday premium: +₱{salary.holidayPremium.toFixed(2)}
-                        </div>
-                      )}
+                    ) : (
+                      <span className="text-xs text-slate-400">No salary data</span>
+                    )}
+                  </td>
+                  <td className="px-4 py-4">
+                    <div className="flex items-center gap-3">
+                      <button
+                        onClick={() => onEdit(shift)}
+                        className="text-sm text-primary hover:bg-primary/10 px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1 font-medium"
+                      >
+                        <RiEditLine className="w-4 h-4" />
+                        Edit
+                      </button>
+                      <button
+                        onClick={() => onDelete(shift)}
+                        className="text-sm text-red-500 hover:bg-red-50 px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1 font-medium"
+                      >
+                        <RiDeleteBinLine className="w-4 h-4" />
+                        Delete
+                      </button>
                     </div>
-                  ) : (
-                    <span className="text-xs text-slate-400">No salary data</span>
-                  )}
-                </td>
-                <td className="px-4 py-4">
-                  <div className="flex items-center gap-3">
-                    <button
-                      onClick={() => onEdit(shift)}
-                      className="text-sm text-primary hover:bg-primary/10 px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1 font-medium"
-                    >
-                      <RiEditLine className="w-4 h-4" />
-                      Edit
-                    </button>
-                    <button
-                      onClick={() => onDelete(shift)}
-                      className="text-sm text-red-500 hover:bg-red-50 px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1 font-medium"
-                    >
-                      <RiDeleteBinLine className="w-4 h-4" />
-                      Delete
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
-    </div>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
 
-    {/* Notes Modal */}
-    {showNotesModal && (
-      <div
-        className="fixed inset-0 bg-black/50 flex items-center justify-center p-4"
-        style={{ zIndex: 100 }}
-        onClick={() => setShowNotesModal(false)}
-      >
+      {/* Notes Modal */}
+      {showNotesModal && (
         <div
-          className="bg-white rounded-2xl shadow-xl p-6 w-full max-w-lg"
-          onClick={(e) => e.stopPropagation()}
+          className="fixed inset-0 bg-black/50 flex items-center justify-center p-4"
+          style={{ zIndex: 100 }}
+          onClick={() => setShowNotesModal(false)}
         >
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-bold text-slate-800">Shift Notes</h3>
-            <button
-              onClick={() => setShowNotesModal(false)}
-              className="text-slate-400 hover:text-slate-600 transition-colors"
-            >
-              <RiCloseLine className="w-6 h-6" />
-            </button>
-          </div>
-
-          {selectedShift && (
-            <div className="mb-4 pb-4 border-b border-slate-200">
-              <p className="text-xs text-slate-500">
-                <span className="font-semibold">Date:</span> {new Date(selectedShift.date).toLocaleDateString('en-US', {
-                  year: 'numeric',
-                  month: 'long',
-                  day: 'numeric'
-                })}
-              </p>
+          <div
+            className="bg-white rounded-2xl shadow-xl p-6 w-full max-w-lg"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-bold text-slate-800">Shift Notes</h3>
+              <button
+                onClick={() => setShowNotesModal(false)}
+                className="text-slate-400 hover:text-slate-600 transition-colors"
+              >
+                <RiCloseLine className="w-6 h-6" />
+              </button>
             </div>
-          )}
 
-          <div className="bg-slate-50 rounded-xl p-4 max-h-[60vh] overflow-y-auto">
-            <p className="text-sm text-slate-700 whitespace-pre-wrap">{selectedNotes}</p>
-          </div>
+            {selectedShift && (
+              <div className="mb-4 pb-4 border-b border-slate-200">
+                <p className="text-xs text-slate-500">
+                  <span className="font-semibold">Date:</span> {new Date(selectedShift.date).toLocaleDateString('en-US', {
+                    year: 'numeric',
+                    month: 'long',
+                    day: 'numeric'
+                  })}
+                </p>
+              </div>
+            )}
 
-          <div className="mt-6">
-            <button
-              onClick={() => setShowNotesModal(false)}
-              className="w-full bg-primary text-white py-3 rounded-xl text-sm font-semibold hover:bg-primary-light transition-colors"
-            >
-              Close
-            </button>
+            <div className="bg-slate-50 rounded-xl p-4 max-h-[60vh] overflow-y-auto">
+              <p className="text-sm text-slate-700 whitespace-pre-wrap">{selectedNotes}</p>
+            </div>
+
+            <div className="mt-6">
+              <button
+                onClick={() => setShowNotesModal(false)}
+                className="w-full bg-primary text-white py-3 rounded-xl text-sm font-semibold hover:bg-primary-light transition-colors"
+              >
+                Close
+              </button>
+            </div>
           </div>
         </div>
-      </div>
-    )}
+      )}
     </>
   );
 }

@@ -6,13 +6,13 @@ const sequelize = require('./models');
 const User = require('./models/User');
 const Shift = require('./models/Shift');
 const Holiday = require('./models/Holiday');
-
 const authRoutes = require('./routes/auth');
 const shiftRoutes = require('./routes/shift');
 const usersRoutes = require('./routes/users');
 const salaryRoutes = require('./routes/salary');
 const holidayRoutes = require('./routes/holiday');
 const departmentRoutes = require('./routes/department');
+
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -33,7 +33,7 @@ app.use(cors({
     },
     credentials: true
 }));
-app.use(express.json());
+app.use(express.json({ limit: '50mb' }));
 
 // Serve React build (dist) folder in production
 const distPath = path.join(__dirname, '..', 'dist');
@@ -45,6 +45,7 @@ app.use('/api/users', usersRoutes);
 app.use('/api/salary', salaryRoutes);
 app.use('/api/holidays', holidayRoutes);
 app.use('/api/departments', departmentRoutes);
+
 
 // Catch-all: send React app for any non-API route
 app.use(express.static(distPath));

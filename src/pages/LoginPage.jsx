@@ -80,7 +80,17 @@ function LoginPage() {
           text={loading ? 'Signing in...' : 'Sign in'}
           type="submit"
           disabled={loading}
-       />
+        />
+
+        <div className="flex flex-col items-center gap-2 pt-2 border-t border-slate-100">
+          <button
+            type="button"
+            onClick={() => navigate('/kiosk')}
+            className="text-sm font-bold text-primary hover:text-primary/80 transition-colors cursor-pointer"
+          >
+            Go to Face Scan Kiosk
+          </button>
+        </div>
       </form>
 
     </div>

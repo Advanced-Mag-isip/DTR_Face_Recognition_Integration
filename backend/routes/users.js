@@ -3,6 +3,28 @@ const router = express.Router();
 const User = require('../models/User');
 const Shift = require('../models/Shift');
 const { protect, admin } = require('../middleware/authMiddleware');
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
+
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, path.join(__dirname, '../storage/faces/'));
+  },
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname) || '.jpg';
+    cb(null, `${req.params.id}${ext}`);
+  }
+});
+
+const upload = multer({
+  storage,
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    if (file.mimetype.startsWith('image/')) cb(null, true);
+    else cb(new Error('Images only'));
+  }
+});
 
 // Get all users (admin only)
 router.get('/', protect, admin, async (req, res) => {
@@ -28,6 +50,7 @@ router.get('/', protect, admin, async (req, res) => {
             paymentDetails: u.paymentDetails,
             payrollNotes: u.payrollNotes,
             isActive: u.isActive,
+            facePhoto: u.facePhoto ? true : false,
             createdAt: u.createdAt,
             updatedAt: u.updatedAt
         })));
@@ -232,5 +255,71 @@ router.put('/:id/payroll-note', protect, admin, async (req, res) => {
         res.status(500).json({ message: 'Server error', error: err.message });
     }
 });
+
+// POST /api/users/:id/enroll-face (admin only)
+router.post('/:id/enroll-face',
+  protect,
+  admin,
+  upload.single('facePhoto'),
+  async (req, res) => {
+    try {
+      const user = await User.findByPk(req.params.id);
+
+      if (!user) {
+        return res.status(404).json({ message: 'Employee not found' });
+      }
+
+      if (!req.file) {
+        return res.status(400).json({ message: 'No photo uploaded' });
+      }
+
+      // Delete old photo if exists
+      if (user.facePhoto && fs.existsSync(user.facePhoto)) {
+        fs.unlinkSync(user.facePhoto);
+      }
+
+      // Store relative path
+      const photoPath = `backend/storage/faces/${req.file.filename}`;
+      await user.update({ facePhoto: photoPath });
+
+      res.json({
+        message: 'Face enrolled successfully',
+        employeeId: user.employeeId,
+        faceEnrolled: true,
+      });
+
+    } catch (err) {
+      console.error('Enroll error:', err);
+      res.status(500).json({ message: 'Enroll failed', error: err.message });
+    }
+  }
+);
+
+// DELETE /api/users/:id/enroll-face (admin only) — remove reference photo
+router.delete('/:id/enroll-face',
+  protect,
+  admin,
+  async (req, res) => {
+    try {
+      const user = await User.findByPk(req.params.id);
+
+      if (!user) {
+        return res.status(404).json({ message: 'Employee not found' });
+      }
+
+      if (user.facePhoto && fs.existsSync(user.facePhoto)) {
+        fs.unlinkSync(user.facePhoto);
+      }
+
+      await user.update({ facePhoto: null });
+
+      res.json({ message: 'Face photo removed successfully' });
+
+    } catch (err) {
+      console.error('Remove face error:', err);
+      res.status(500).json({ message: 'Remove failed', error: err.message });
+    }
+  }
+);
 
 module.exports = router;

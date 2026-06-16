@@ -89,6 +89,16 @@ const User = sequelize.define('User', {
     type: DataTypes.TEXT,
     defaultValue: '{}',
     allowNull: true,
+  },
+  facePhoto: {
+    type: DataTypes.STRING,
+    allowNull: true,
+    defaultValue: null,
+  },
+  faceCheckMethod: {
+    type: DataTypes.STRING,
+    allowNull: true,
+    defaultValue: null,
   }
 }, {
   timestamps: true,

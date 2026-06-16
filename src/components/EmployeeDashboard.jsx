@@ -30,30 +30,38 @@ function EmployeeDashboard() {
 
   const [selectedMonth, setSelectedMonth] = useState(getCurrentMonth());
 
-  // Reset to current month on mount
   useEffect(() => {
     setSelectedMonth(getCurrentMonth());
   }, []);
 
+  const refreshDashboardData = async () => {
+    try {
+      const updatedShifts = await getShifts();
+      setShifts(updatedShifts);
+    } catch (err) {
+      console.error('Error refreshing shifts:', err);
+    }
+  };
+
   useEffect(() => {
+    setLoadingShifts(true);
+    setLoadingSalary(true);
     Promise.all([
       getShifts()
         .then(setShifts)
         .catch(console.error)
         .finally(() => setLoadingShifts(false)),
       getCurrentMonthSalary()
-        .then((data) => {
-          
-          setSalaryData(data);
-        })
+        .then(setSalaryData)
         .catch((err) => {
           console.error('Salary fetch error:', err);
-          // If salary API fails but we have user data, use fallback
           if (user?.dailySalary && user.dailySalary > 0) {
             const hourlyRate = user.dailySalary / 8;
             setSalaryData({
               baseSalary: parseFloat(user.dailySalary),
-              overtimeRate: user.overtimeHourlyRate > 0 ? parseFloat(user.overtimeHourlyRate) : hourlyRate
+              overtimeRate: user.overtimeHourlyRate > 0
+                ? parseFloat(user.overtimeHourlyRate)
+                : hourlyRate
             });
           }
         })
@@ -61,16 +69,18 @@ function EmployeeDashboard() {
     ]);
   }, [user]);
 
-  // Filter by month
+  // Compute if they have a log line written by the kiosk today
+  const todayStr = new Date().toISOString().split('T')[0];
+  const todayShift = shifts.find(s => s.date === todayStr);
+
   let filteredData = [...shifts];
   if (selectedMonth) {
     filteredData = filteredData.filter(shift => {
       const shiftMonth = new Date(shift.date).toISOString().slice(0, 7);
       return shiftMonth === selectedMonth;
-    })
+    });
   }
 
-  // Sort by date
   filteredData.sort((a, b) => {
     const dateA = new Date(a.date);
     const dateB = new Date(b.date);
@@ -80,23 +90,23 @@ function EmployeeDashboard() {
   const handleSaveShift = async (shiftData, setError) => {
     try {
       if (editingshift) {
-        const updated = await updateShift(editingshift.id, shiftData);
-        setShifts(prev => prev.map(shift => shift.id === updated.id ? updated : shift));
-        setShowAddModal(false);
-        setEditingshift(null);
+        // A: If we are editing, call the update API using the target primary key ID
+        await updateShift(editingshift.id, shiftData);
       } else {
-        const newShift = await addShift(shiftData);
-        
-        // Refresh shifts from API to ensure data is in sync
-        const updatedShifts = await getShifts();
-        
-        setShifts(updatedShifts);
-        setShowAddModal(false);
+        // B: If it's a new entry, call the add API
+        await addShift(shiftData);
       }
+
+      // Clean up modal states and refresh table entries smoothly
+      setShowAddModal(false);
+      setEditingshift(null);
+      await refreshDashboardData();
     } catch (err) {
-      console.error('Failed to save shift:', err);
-      const errorMsg = err.response?.data?.message || 'Failed to save shift';
-      if (setError) setError(errorMsg);
+      console.error('Failed to save shift entry:', err);
+      // Optional: Pass the error string back to your AddShiftModal UI alert channel if available
+      if (setError) {
+        setError(err.response?.data?.message || 'Failed to submit shift data.');
+      }
     }
   };
 
@@ -112,10 +122,10 @@ function EmployeeDashboard() {
 
   const handleDeleteConfirm = async () => {
     try {
-      await deleteShift(deleteShiftData.id);
-      setShifts(prev => prev.filter(shift => shift.id !== deleteShiftData.id));
+      await deleteShift(deleteShiftData.id);  // ← this was missing
       setShowDeleteConfirm(false);
       setDeleteShiftData(null);
+      await refreshDashboardData();
     } catch (err) {
       console.error('Failed to delete shift:', err);
     }
@@ -127,6 +137,7 @@ function EmployeeDashboard() {
 
       <div className="p-6 flex justify-center">
         <div className="w-full max-w-5xl">
+
           {!loadingSalary && salaryData && (
             <div className="mt-6">
               <SalaryReport
@@ -150,7 +161,7 @@ function EmployeeDashboard() {
             />
 
             {loadingShifts ? (
-               <div className="text-center py-12 text-slate-400 text-sm">
+              <div className="text-center py-12 text-slate-400 text-sm">
                 Loading shifts...
               </div>
             ) : (

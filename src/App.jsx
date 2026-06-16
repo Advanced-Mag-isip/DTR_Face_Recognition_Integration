@@ -4,6 +4,8 @@ import AdminDashboard from './components/AdminDashboard'
 import LoginPage from './pages/LoginPage'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import ProtectedRoute from './components/ProtectedRoute'
+import KioskMode from './components/KioskMode'; 
+
 
 const Dashboard = () => <EmployeeDashboard />
 
@@ -11,6 +13,7 @@ function App() {
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
+      <Route path="/kiosk" element={<KioskMode />} />
       <Route path="/admin" element={<AdminDashboard />} />
       <Route path="/dashboard" element={
         <ProtectedRoute>
