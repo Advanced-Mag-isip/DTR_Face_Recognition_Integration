@@ -6,6 +6,7 @@ import threading
 import numpy as np
 from PIL import Image
 import glob
+import time  
 
 app = FastAPI()
 
@@ -49,6 +50,7 @@ class VerifyRequest(BaseModel):
 
 @app.post("/verify")
 def verify(req: VerifyRequest):
+    start_time = time.time()
     try:
         if not os.path.exists(req.live_path):
             return { "verified": False, "error": f"Selfie not found: {req.live_path}" }
@@ -60,10 +62,12 @@ def verify(req: VerifyRequest):
         cache_path = base_path + ".npy"
         
         ref_embedding = None
+        is_cache_hit = False
 
         if os.path.exists(cache_path):
             # Cache Hit: Read the raw 512 numbers directly from disk in milliseconds!
             ref_embedding = np.load(cache_path)
+            is_cache_hit = True
         else:
             # Cache Miss: Compute it using InsightFace the very first time
             face_app = _get_face_app()
@@ -102,6 +106,11 @@ def verify(req: VerifyRequest):
         similarity_score = max(0.0, min(1.0, (cosine_sim + 1.0) / 2.0))
         verified = cosine_sim >= COSINE_THRESHOLD
 
+        # Print total 1:1 verification compute time to your server terminal window
+        duration_ms = (time.time() - start_time) * 1000
+        cache_status = "Cache Hit" if is_cache_hit else "Cache Miss"
+        print(f"[PERF] /verify pipeline completed in {duration_ms:.2f}ms ({cache_status})")
+
         return {
             "verified": verified,
             "similarity_score": round(similarity_score, 4),
@@ -118,6 +127,7 @@ class IdentifyRequest(BaseModel):
 
 @app.post("/identify")
 def identify(req: IdentifyRequest):
+    start_time = time.time()
     try:
         if not os.path.exists(req.live_path):
             return { "verified": False, "error": "Selfie snapshot not found" }
@@ -130,39 +140,79 @@ def identify(req: IdentifyRequest):
         live_faces = face_app.get(live_arr)
 
         if not live_faces:
-            return { "verified": False, "error": "no_face_in_selfie" }
+            return { "verified": False, "error": "Face not clear, please try again" }
 
         live_face = max(live_faces, key=lambda f: f.det_score)
         live_embedding = live_face.normed_embedding
 
-        # SCAN ALL CACHED EMBEDDINGS (.npy files) IN STORAGE
-        faces_dir = os.path.join("..", "backend", "storage", "faces", "*.npy")
-        cache_files = glob.glob(faces_dir)
-
+        # Check for both .npy AND .jpg files
+        faces_dir = "/app/storage/faces"
+        
+        # Get all .npy files (existing embeddings)
+        npy_files = glob.glob(os.path.join(faces_dir, "*.npy"))
+        
+        # Get all .jpg files (reference photos without embeddings)
+        jpg_files = glob.glob(os.path.join(faces_dir, "*.jpg"))
+        
+        # Generate embeddings for .jpg files that don't have .npy counterparts
+        processed_files = []
+        
+        for jpg_path in jpg_files:
+            base_name = os.path.splitext(os.path.basename(jpg_path))[0]
+            npy_path = os.path.join(faces_dir, f"{base_name}.npy")
+            
+            if not os.path.exists(npy_path):
+                # Generate embedding for this employee
+                try:
+                    with open(jpg_path, "rb") as f:
+                        ref_bytes = f.read()
+                    ref_arr = _load_image(ref_bytes)
+                    ref_faces = face_app.get(ref_arr)
+                    
+                    if ref_faces:
+                        best_ref_face = max(ref_faces, key=lambda f: f.det_score)
+                        ref_embedding = best_ref_face.normed_embedding
+                        np.save(npy_path, ref_embedding)
+                        processed_files.append(base_name)
+                except Exception as e:
+                    print(f"Error generating embedding for {base_name}: {e}")
+        
+        # Now scan all embeddings (including newly generated ones)
+        all_embeddings = glob.glob(os.path.join(faces_dir, "*.npy"))
+        
         best_match_id = None
         highest_score = -1.0
 
-        for cache_path in cache_files:
+        for cache_path in all_embeddings:
             ref_embedding = np.load(cache_path)
             cosine_sim = float(np.dot(live_embedding, ref_embedding))
-
+            
             if cosine_sim > highest_score:
                 highest_score = cosine_sim
                 filename = os.path.basename(cache_path)
                 best_match_id, _ = os.path.splitext(filename)
 
-        # Evaluate highest matching calculation metric against threshold
         normalized_score = max(0.0, min(1.0, (highest_score + 1.0) / 2.0))
         
+        duration_ms = (time.time() - start_time) * 1000
+        print(f"[PERF] /identify completed across {len(all_embeddings)} vectors in {duration_ms:.2f}ms")
+        if processed_files:
+            print(f"[INFO] Generated embeddings for {len(processed_files)} new employees: {processed_files}")
+
         if highest_score >= COSINE_THRESHOLD:
             return {
                 "verified": True,
-                "employeeId": best_match_id, # Returns the filename string token (e.g., "6" or "emp001")
+                "employeeId": best_match_id,
                 "similarity_score": round(normalized_score, 4),
-                "cosine_similarity": round(highest_score, 4)
+                "cosine_similarity": round(highest_score, 4),
+                "new_embeddings_generated": processed_files
             }
         
-        return { "verified": False, "error": "Unknown face. Verification mapping threshold not met." }
+        return { 
+            "verified": False, 
+            "error": "Unknown face. Verification mapping threshold not met.",
+            "new_embeddings_generated": processed_files
+        }
 
     except Exception as e:
         return { "verified": False, "error": str(e) }

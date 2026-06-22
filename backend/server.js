@@ -22,7 +22,7 @@ Shift.belongsTo(User, { foreignKey: 'employeeId', as: 'employee', onDelete: 'CAS
 User.hasMany(Shift, { foreignKey: 'employeeId', as: 'shifts', onDelete: 'CASCADE' });
 
 // CORS configuration
-const allowedOrigins = ['http://localhost:5173', 'https://dtr.advancedthinkers.app'];
+const allowedOrigins = ['http://localhost:5173', 'https://dtr.advancedthinkers.app', 'http://localhost:8315', 'http://127.0.0.1:8315'];
 app.use(cors({
     origin: function (origin, callback) {
         if (!origin || allowedOrigins.indexOf(origin) !== -1) {
@@ -59,7 +59,7 @@ app.use((req, res, next) => {
 });
 
 
-sequelize.sync()
+sequelize.sync({ alter: true })
     .then(() => {
         app.listen(PORT, () => {});
     })

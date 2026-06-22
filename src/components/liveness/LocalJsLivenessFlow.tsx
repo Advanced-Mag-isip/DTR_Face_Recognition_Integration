@@ -114,6 +114,9 @@ export function LocalJsLivenessFlow({ onPassed, onFailed }: Props) {
   const scanAnimRef = useRef<number | null>(null);
   const selfieRef = useRef("");
 
+  const livenessStartTimeRef = useRef<number | null>(null);
+  const modelLoadStartTimeRef = useRef<number | null>(null);
+
   const faceSnapshotsRef = useRef<FaceDetectionSnapshot[]>([]);
 
   // Live face tracking refs
@@ -218,9 +221,15 @@ export function LocalJsLivenessFlow({ onPassed, onFailed }: Props) {
   useEffect(() => {
     let dead = false;
 
+    modelLoadStartTimeRef.current = performance.now();
+
     getFaceDetector()
       .then((detector) => {
         if (dead) return;
+
+        const loadDuration = (performance.now() - modelLoadStartTimeRef.current!).toFixed(0);
+        console.log(`%c[PERF] BlazeFace singleton check/load completed in ${loadDuration}ms`, "color: #a855f7; font-weight: bold;");
+
         detectorRef.current = detector;
         startCamera();
       })
@@ -591,6 +600,8 @@ export function LocalJsLivenessFlow({ onPassed, onFailed }: Props) {
   useEffect(() => {
     if (phase !== "flashing") return;
 
+    livenessStartTimeRef.current = performance.now();
+
     let currentIdx = 0;
     setFlashIndex(currentIdx);
 
@@ -650,6 +661,11 @@ export function LocalJsLivenessFlow({ onPassed, onFailed }: Props) {
     // Upload local liveness result
     useEffect(() => {
         if (phase !== "uploading") return;
+
+        if (livenessStartTimeRef.current) {
+          const duration = (performance.now() - livenessStartTimeRef.current).toFixed(0);
+          console.log(`%c[PERF] Liveness check sequence completed in ${duration}ms`, "color: #10b981; font-weight: bold;");
+        }
 
         stopCamera();
         go("passed");

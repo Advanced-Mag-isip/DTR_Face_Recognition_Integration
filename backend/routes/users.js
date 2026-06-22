@@ -55,7 +55,8 @@ router.get('/', protect, admin, async (req, res) => {
             updatedAt: u.updatedAt
         })));
     } catch (err) {
-        res.status(500).json({ message: 'Server error', error: err.message });
+        console.error('CREATE USER ERROR:', err);
+        res.status(500).json({ message: 'Server error', error: err.message, stack: err.stack });
     }
 });
 
@@ -64,37 +65,44 @@ router.post('/', protect, admin, async (req, res) => {
     const { employeeId, password, firstName, lastName, role, department, isActive, position, dailySalary, hourlyRate, monthlySalary, overtimeHourlyRate, paymentType, paymentMethod, paymentDetails } = req.body;
 
     try {
-        // Auto-generate employee ID based on role if not provided
-        let generatedEmployeeId = employeeId;
+        const prefix = role === 'admin' ? 'ADMIN' : 'EMP';
+
+        // Auto-generate employeeId if not provided or empty
+        let generatedEmployeeId = employeeId && employeeId.trim() !== '' 
+            ? employeeId.trim() 
+            : null;
+
         if (!generatedEmployeeId) {
-            const prefix = role === 'admin' ? 'ADMIN' : 'EMP';
-            const lastUser = await User.findOne({
-                where: { role },
-                order: [['employeeId', 'DESC']]
-            });
-            
-            let nextNum = 1;
-            if (lastUser && lastUser.employeeId) {
-                const match = lastUser.employeeId.match(new RegExp(`^${prefix}-(\\d+)$`));
+            // Find highest number among all users of this role
+            const allUsers = await User.findAll({ where: { role } });
+            let highestNum = 0;
+            allUsers.forEach(u => {
+                if (!u.employeeId) return;
+                const match = u.employeeId.match(/(\d+)$/);
                 if (match) {
-                    nextNum = parseInt(match[1], 10) + 1;
+                    const num = parseInt(match[1], 10);
+                    if (num > highestNum) highestNum = num;
                 }
-            }
-            generatedEmployeeId = `${prefix}-${String(nextNum).padStart(3, '0')}`;
+            });
+            generatedEmployeeId = `${prefix}-${String(highestNum + 1).padStart(3, '0')}`;
         } else {
-            // Check if provided employee ID already exists
-            const existingUser = await User.findOne({ where: { employeeId: generatedEmployeeId } });
+            // Check if provided ID already exists
+            const existingUser = await User.findOne({ 
+                where: { employeeId: generatedEmployeeId } 
+            });
             if (existingUser) {
                 return res.status(400).json({ message: 'Employee ID already exists' });
             }
         }
 
-        // Default password is the same as employee ID
-        const generatedPassword = generatedEmployeeId;
+        // Default password = employeeId if not provided
+        const finalPassword = (password && password.trim() !== '') 
+            ? password.trim() 
+            : generatedEmployeeId;
 
         const user = await User.create({
             employeeId: generatedEmployeeId,
-            password: password || generatedPassword,
+            password: finalPassword,
             firstName,
             lastName,
             role,
@@ -131,6 +139,7 @@ router.post('/', protect, admin, async (req, res) => {
             }
         });
     } catch (err) {
+        console.error('CREATE USER ERROR:', err);
         res.status(500).json({ message: 'Server error', error: err.message });
     }
 });

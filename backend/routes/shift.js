@@ -9,6 +9,8 @@ const axios = require('axios');
 const fs = require('fs');
 const path = require('path');
 
+const FACE_SERVICE_URL = process.env.FACE_SERVICE_URL || 'http://localhost:5001';
+
 const calcHours = (start, end) => {
     if (!start || !end) return 0;
     const [sh, sm] = start.split(':').map(Number);
@@ -36,6 +38,105 @@ const checkHoliday = async (date) => {
         holidayType: null,
         holidayName: null
     };
+};
+
+// Helper function to determine next action - UPDATE TIME-OUT ON REPEATED SCAN
+const determineNextAction = (shift, timeContext) => {
+  const { isMorning, isAfternoon, isOvertime, hour } = timeContext;
+  
+  // If no shift exists yet, start with the appropriate shift based on time
+  if (!shift) {
+    if (isMorning) return { action: 'in', field: 'morningTimeIn', period: 'Morning' };
+    if (isAfternoon) return { action: 'in', field: 'afternoonTimeIn', period: 'Afternoon' };
+    if (isOvertime) return { action: 'in', field: 'overtimeTimeIn', period: 'Overtime' };
+    return { action: 'unknown', field: null, period: null };
+  }
+
+  if (isMorning) {
+    // If morning in is missing, allow morning in
+    if (!shift.morningTimeIn) {
+      return { action: 'in', field: 'morningTimeIn', period: 'Morning' };
+    }
+    // If morning in exists but no out, allow morning out
+    if (shift.morningTimeIn && !shift.morningTimeOut) {
+      return { action: 'out', field: 'morningTimeOut', period: 'Morning' };
+    }
+    // Morning is complete (both in and out exist)
+    // If they scan again in morning, UPDATE the time-out
+    if (shift.morningTimeIn && shift.morningTimeOut) {
+      // Check if afternoon is available
+      if (!shift.afternoonTimeIn) {
+        // Allow starting afternoon early
+        if (hour >= 11) {
+          return { action: 'in', field: 'afternoonTimeIn', period: 'Afternoon' };
+        }
+        // Still morning - UPDATE the morning time-out
+        return { action: 'update_out', field: 'morningTimeOut', period: 'Morning' };
+      }
+      // If afternoon in exists but no out, allow afternoon out
+      if (shift.afternoonTimeIn && !shift.afternoonTimeOut) {
+        return { action: 'out', field: 'afternoonTimeOut', period: 'Afternoon' };
+      }
+      // Afternoon is complete, check overtime
+      if (shift.afternoonTimeIn && shift.afternoonTimeOut) {
+        if (!shift.overtimeTimeIn) {
+          // Allow starting overtime anytime after afternoon is complete
+          return { action: 'in', field: 'overtimeTimeIn', period: 'Overtime' };
+        }
+        if (shift.overtimeTimeIn && !shift.overtimeTimeOut) {
+          return { action: 'out', field: 'overtimeTimeOut', period: 'Overtime' };
+        }
+        // Everything is complete
+        return { action: 'complete', field: null, period: null,
+                  message: 'All shifts for today are complete!' };
+      }
+    }
+  }
+
+  if (isAfternoon) {
+    // If afternoon in is missing, allow afternoon in
+    if (!shift.afternoonTimeIn) {
+      return { action: 'in', field: 'afternoonTimeIn', period: 'Afternoon' };
+    }
+    // If afternoon in exists but no out, allow afternoon out
+    if (shift.afternoonTimeIn && !shift.afternoonTimeOut) {
+      return { action: 'out', field: 'afternoonTimeOut', period: 'Afternoon' };
+    }
+    // Afternoon is complete, check if they want to update or move to overtime
+    if (shift.afternoonTimeIn && shift.afternoonTimeOut) {
+      if (!shift.overtimeTimeIn) {
+        // Allow starting overtime anytime after afternoon is complete
+        if (hour >= 17) {
+          return { action: 'in', field: 'overtimeTimeIn', period: 'Overtime' };
+        }
+        // Still afternoon - UPDATE the afternoon time-out
+        return { action: 'update_out', field: 'afternoonTimeOut', period: 'Afternoon' };
+      }
+      if (shift.overtimeTimeIn && !shift.overtimeTimeOut) {
+        return { action: 'out', field: 'overtimeTimeOut', period: 'Overtime' };
+      }
+      // Everything is complete
+      return { action: 'complete', field: null, period: null,
+                message: 'All shifts for today are complete!' };
+    }
+  }
+
+  if (isOvertime) {
+    // If overtime in is missing, allow overtime in
+    if (!shift.overtimeTimeIn) {
+      return { action: 'in', field: 'overtimeTimeIn', period: 'Overtime' };
+    }
+    // If overtime in exists but no out, allow overtime out
+    if (shift.overtimeTimeIn && !shift.overtimeTimeOut) {
+      return { action: 'out', field: 'overtimeTimeOut', period: 'Overtime' };
+    }
+    // Overtime is complete - allow updating the time-out
+    if (shift.overtimeTimeIn && shift.overtimeTimeOut) {
+      return { action: 'update_out', field: 'overtimeTimeOut', period: 'Overtime' };
+    }
+  }
+
+  return { action: 'unknown', field: null, period: null };
 };
 
 // Create shift - for self or admin for employee
@@ -293,7 +394,7 @@ router.post('/verify-face', protect, async (req, res) => {
     const tempPath = path.join(__dirname, '../storage/temp/', tempFilename);
     fs.writeFileSync(tempPath, Buffer.from(base64Data, 'base64'));
 
-    const response = await axios.post('http://localhost:5001/verify', {
+    const response = await axios.post(`${FACE_SERVICE_URL}/verify`, {
       live_path: tempPath,
       ref_path: refPath,
     });
@@ -316,7 +417,7 @@ router.post('/verify-face', protect, async (req, res) => {
 // POST /api/shifts/kiosk-clock
 router.post('/kiosk-clock', async (req, res) => {
   try {
-    const { liveImage, livenessAction } = req.body;
+    const { liveImage } = req.body;
     if (!liveImage) return res.status(400).json({ error: 'No image frame captured.' });
 
     // 1. Save kiosk webcam capture frame to temp folder
@@ -324,148 +425,160 @@ router.post('/kiosk-clock', async (req, res) => {
     const tempPath = path.join(__dirname, '../storage/temp/', tempFilename);
     const base64Data = liveImage.replace(/^data:image\/\w+;base64,/, '');
     
-    // Ensure directories exist
     fs.mkdirSync(path.dirname(tempPath), { recursive: true });
     fs.writeFileSync(tempPath, Buffer.from(base64Data, 'base64'));
 
-    // 2. Call the Python /identify endpoint matrix (1:N search loop)
-    const response = await axios.post('http://localhost:5001/identify', {
+    // 2. Call the Python /identify endpoint
+    const response = await axios.post(`${FACE_SERVICE_URL}/identify`, {
       live_path: tempPath,
     });
 
-    const { verified, employeeId, error } = response.data;
+    const { verified: isFaceRecognized, employeeId: identifiedEmployeeId, error: aiError } = response.data;
 
-    if (!verified) {
-      // NOTE: File deletion line commented out to preserve snapshots for audit logs as requested
-      // if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
-      return res.status(401).json({ error: error || 'Biometric recognition match refused.' });
+    console.log('DEBUG — Python returned employeeId:', identifiedEmployeeId, typeof identifiedEmployeeId);
+
+    if (!isFaceRecognized) {
+      if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
+      return res.status(401).json({ error: aiError || 'Biometric recognition match refused.' });
     }
 
-    // 3. Look up employee inside MySQL using the identified primary key value
-    const user = await User.findByPk(employeeId); 
+    const parsedEmployeeId = parseInt(identifiedEmployeeId, 10);
+    console.log('DEBUG — Querying MySQL with converted Integer ID:', parsedEmployeeId, typeof parsedEmployeeId);
+
+    const user = await User.findByPk(isNaN(parsedEmployeeId) ? identifiedEmployeeId : parsedEmployeeId);
+    console.log('DEBUG — User.findByPk result:', user ? user.id : 'NOT FOUND');
+
     if (!user) {
-      // if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
+      if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
       return res.status(404).json({ error: 'Identified database user record not found.' });
     }
 
-    // 4. Track local date and time parameters configuration
     const now = new Date();
     const timeStr = now.toTimeString().slice(0, 5); // "HH:MM"
-    const today = now.toISOString().split('T')[0]; // "YYYY-MM-DD"
+    
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    const today = `${year}-${month}-${day}`; // Fixed: Local safe YYYY-MM-DD format
+    
     const hour = now.getHours();
 
     const isMorning = hour < 12;
     const isAfternoon = hour >= 12 && hour < 18;
     const isOvertime = hour >= 18;
 
+    // 7. Get today's shift
     let shift = await Shift.findOne({ where: { employeeId: user.id, date: today } });
-    const action = livenessAction || 'in';
     const holidayInfo = await checkHoliday(today);
 
-    if (action === 'in') {
-      if (isMorning) {
-        // GUARD: Block double morning check-ins
-        if (shift && shift.morningTimeIn) {
-          return res.status(400).json({ error: 'You have already timed in for the morning shift today.' });
-        }
-        
-        if (shift) {
-          await shift.update({ morningTimeIn: timeStr, faceVerified: true });
-        } else {
-          await Shift.create({ employeeId: user.id, date: today, morningTimeIn: timeStr, totalHours: 0, isHoliday: holidayInfo.isHoliday, faceVerified: true });
-        }
-      } 
-      
-      else if (isAfternoon) {
-        // GUARD: Block double afternoon check-ins
-        if (shift && shift.afternoonTimeIn) {
-          return res.status(400).json({ error: 'You have already timed in for the afternoon shift today.' });
-        }
+    // 8. Determine next action using the helper
+    const timeContext = { isMorning, isAfternoon, isOvertime, hour };
+    const nextAction = determineNextAction(shift, timeContext);
 
-        if (shift) {
-          await shift.update({ afternoonTimeIn: timeStr, faceVerified: true });
-        } else {
-          await Shift.create({ employeeId: user.id, date: today, afternoonTimeIn: timeStr, totalHours: 0, isHoliday: holidayInfo.isHoliday, faceVerified: true });
-        }
-      } 
-      
-      else if (isOvertime) {
-        // GUARD: Block double overtime check-ins
-        if (shift && shift.overtimeTimeIn) {
-          return res.status(400).json({ error: 'You have already timed in for overtime tonight.' });
-        }
-
-        if (shift) {
-          await shift.update({ overtimeTimeIn: timeStr, faceVerified: true });
-        } else {
-          await Shift.create({ employeeId: user.id, date: today, overtimeTimeIn: timeStr, totalHours: 0, isHoliday: holidayInfo.isHoliday, faceVerified: true });
-        }
-      }
-    } 
-    
-    else if (action === 'out') {
-      // GUARD: Must have an entry row for today to register a out stamp
-      if (!shift) {
-        return res.status(400).json({ error: 'No active work record found for today. Please Time In first.' });
-      }
-
-      let updateFields = { faceVerified: true };
-
-      if (isMorning) {
-        // GUARD: Must have typed in to type out
-        if (!shift.morningTimeIn) {
-          return res.status(400).json({ error: 'Cannot Time Out. You never timed in this morning.' });
-        }
-        // GUARD: Block duplicate out clicks
-        if (shift.morningTimeOut) {
-          return res.status(400).json({ error: 'You have already timed out for the morning shift today.' });
-        }
-        updateFields.morningTimeOut = timeStr;
-        updateFields.morningHours = calcHours(shift.morningTimeIn, timeStr);
-      } 
-      
-      else if (isAfternoon) {
-        // GUARD: Must have an afternoon in stamp
-        if (!shift.afternoonTimeIn) {
-          return res.status(400).json({ error: 'Cannot Time Out. You never timed in this afternoon.' });
-        }
-        // GUARD: Block duplicate out clicks
-        if (shift.afternoonTimeOut) {
-          return res.status(400).json({ error: 'You have already timed out for the afternoon shift today.' });
-        }
-        updateFields.afternoonTimeOut = timeStr;
-        updateFields.afternoonHours = calcHours(shift.afternoonTimeIn, timeStr);
-      } 
-      
-      else if (isOvertime) {
-        const otIn = shift.overtimeTimeIn || shift.overtimeStart;
-        // GUARD: Must have an overtime check in stamp
-        if (!otIn) {
-          return res.status(400).json({ error: 'Cannot Time Out. You never timed in for overtime tonight.' });
-        }
-        // GUARD: Block duplicate out clicks
-        if (shift.overtimeTimeOut) {
-          return res.status(400).json({ error: 'You have already timed out for your overtime shift tonight.' });
-        }
-        updateFields.overtimeTimeOut = timeStr;
-        updateFields.overtimeHours = calcHours(otIn, timeStr);
-      }
-
-      await shift.update(updateFields);
-      
-      // Recalculate runtime aggregated total hours column cleanly
-      const freshShift = await Shift.findByPk(shift.id);
-      const totalHours = (freshShift.morningHours || 0) + (freshShift.afternoonHours || 0) + (freshShift.overtimeHours || 0);
-      await freshShift.update({ totalHours });
+    // 9. Handle cases
+    if (nextAction.action === 'complete') {
+      if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
+      return res.status(400).json({ 
+        error: nextAction.message || 'All shifts for today are complete!' 
+      });
     }
 
-    //NOTE: File deletion step removed here as well to permanently save your temp selfies!
+    if (nextAction.action === 'unknown') {
+      if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
+      return res.status(400).json({ error: 'Unable to determine appropriate action.' });
+    }
+
+    // 10. Process the action
+    let updateFields = { faceVerified: true };
+    let actionMessage = '';
+    let hoursField = '';
+
+    // Handle IN actions
+    if (nextAction.action === 'in') {
+      updateFields[nextAction.field] = timeStr;
+      actionMessage = `Timed In - ${nextAction.period} Shift`;
+    }
+    // Handle OUT actions
+    else if (nextAction.action === 'out') {
+      const fieldMap = {
+        'morningTimeOut': { inField: 'morningTimeIn', hoursField: 'morningHours' },
+        'afternoonTimeOut': { inField: 'afternoonTimeIn', hoursField: 'afternoonHours' },
+        'overtimeTimeOut': { inField: 'overtimeTimeIn', hoursField: 'overtimeHours' }
+      };
+      
+      updateFields[nextAction.field] = timeStr;
+      const inField = fieldMap[nextAction.field].inField;
+      hoursField = fieldMap[nextAction.field].hoursField;
+      
+      // Calculate hours
+      if (shift && shift[inField]) {
+        updateFields[hoursField] = calcHours(shift[inField], timeStr);
+      }
+      actionMessage = `Timed Out - ${nextAction.period} Shift`;
+    }
+    // Handle UPDATE_OUT actions (update existing time-out)
+    else if (nextAction.action === 'update_out') {
+      const fieldMap = {
+        'morningTimeOut': { inField: 'morningTimeIn', hoursField: 'morningHours' },
+        'afternoonTimeOut': { inField: 'afternoonTimeIn', hoursField: 'afternoonHours' },
+        'overtimeTimeOut': { inField: 'overtimeTimeIn', hoursField: 'overtimeHours' }
+      };
+      
+      // Update the time-out with the new time
+      updateFields[nextAction.field] = timeStr;
+      const inField = fieldMap[nextAction.field].inField;
+      hoursField = fieldMap[nextAction.field].hoursField;
+      
+      // Recalculate hours with the new time
+      if (shift && shift[inField]) {
+        updateFields[hoursField] = calcHours(shift[inField], timeStr);
+      }
+      actionMessage = `Updated Time-Out - ${nextAction.period} Shift`;
+    }
+
+    // 11. Update or create shift
+    if (shift) {
+      await shift.update(updateFields);
+      
+      // Recalculate total hours
+      const freshShift = await Shift.findByPk(shift.id);
+      const totalHours = (freshShift.morningHours || 0) + 
+                        (freshShift.afternoonHours || 0) + 
+                        (freshShift.overtimeHours || 0);
+      await freshShift.update({ totalHours });
+    } else {
+      // Create new shift with appropriate fields
+      const newShiftData = {
+        employeeId: user.id,
+        date: today,
+        isHoliday: holidayInfo.isHoliday,
+        faceVerified: true,
+        totalHours: 0
+      };
+      
+      // Add the specific time field
+      newShiftData[nextAction.field] = timeStr;
+      
+      // If it's an OUT or UPDATE_OUT action, we need the corresponding IN field too
+      if (nextAction.action === 'in') {
+        await Shift.create(newShiftData);
+      } else {
+        // Shouldn't happen - can't OUT/UPDATE without existing shift
+        if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
+        return res.status(400).json({ error: 'Cannot clock out without an existing shift.' });
+      }
+    }
+
+    // 12. Clean up
     if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
 
     return res.json({
       success: true,
-      employeeName: user.name || user.firstName || user.username || 'Employee', 
-      message: `Successfully recorded Time-${action.toUpperCase()} transaction.`
+      employeeName: user.name || user.firstName || user.username || 'Employee',
+      message: actionMessage,
+      action: nextAction.action,
+      period: nextAction.period,
+      time: timeStr
     });
 
   } catch (err) {

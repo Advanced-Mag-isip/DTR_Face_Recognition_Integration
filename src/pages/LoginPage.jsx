@@ -88,7 +88,7 @@ function LoginPage() {
             onClick={() => navigate('/kiosk')}
             className="text-sm font-bold text-primary hover:text-primary/80 transition-colors cursor-pointer"
           >
-            Go to Face Scan Kiosk
+            Go to Face Scan
           </button>
         </div>
       </form>

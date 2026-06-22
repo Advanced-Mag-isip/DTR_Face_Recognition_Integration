@@ -1,0 +1,63 @@
+services:
+  mysql:
+    image: mysql:8.0
+    environment:
+      TZ: Asia/Manila
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${DB_NAME}
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${DB_ROOT_PASSWORD}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  face-service:
+    build: ./face-service
+    command: uvicorn main:app --host 0.0.0.0 --port 5001 --reload
+    volumes:
+      - ./face-service:/app
+      - ./backend/storage:/app/storage
+    depends_on:
+      mysql:
+        condition: service_healthy
+
+  backend:
+    build: ./backend
+    command: node server.js
+    volumes:
+      - ./backend:/app
+      - /app/node_modules
+      - ./backend/storage:/app/storage
+    environment:
+      - TZ=Asia/Manila
+      - PORT=3001
+      - DB_HOST=mysql
+      - DB_NAME=${DB_NAME}
+      - DB_USER=root
+      - DB_PASSWORD=${DB_ROOT_PASSWORD}
+      - JWT_SECRET=${JWT_SECRET}
+      - FACE_SERVICE_URL=http://face-service:5001
+      - ALLOWED_HOSTS=${ALLOWED_HOSTS}
+    depends_on:
+      mysql:
+        condition: service_healthy
+      face-service:
+        condition: service_started
+
+  frontend:
+    build: .
+    command: npm run dev -- --host 0.0.0.0 --port 8315
+    volumes:
+      - .:/app
+      - /app/node_modules
+    ports:
+      - "8315:8315"
+    environment:
+      - VITE_API_URL=${VITE_API_URL}
+    depends_on:
+      - backend
+
+volumes:
+  mysql_data:
