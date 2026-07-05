@@ -12,6 +12,8 @@ const usersRoutes = require('./routes/users');
 const salaryRoutes = require('./routes/salary');
 const holidayRoutes = require('./routes/holiday');
 const departmentRoutes = require('./routes/department');
+const payrollExportRoutes = require('./routes/payrollExport');
+
 
 
 const app = express();
@@ -45,6 +47,7 @@ app.use('/api/users', usersRoutes);
 app.use('/api/salary', salaryRoutes);
 app.use('/api/holidays', holidayRoutes);
 app.use('/api/departments', departmentRoutes);
+app.use('/api/payroll-export', payrollExportRoutes);
 
 
 // Catch-all: send React app for any non-API route

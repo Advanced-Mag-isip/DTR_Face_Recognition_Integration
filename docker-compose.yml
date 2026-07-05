@@ -30,6 +30,8 @@ services:
       - ./backend:/app
       - /app/node_modules
       - ./backend/storage:/app/storage
+    ports:
+      - "3001:3001"
     environment:
       - TZ=Asia/Manila
       - PORT=3001
